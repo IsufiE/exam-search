@@ -9,7 +9,12 @@ from pydantic import BaseModel
 
 from pdf_parser import extract_text_from_pdf
 from question_parser import split_into_questions
-from search_engine import embed_text, cosine_similarity
+from search_engine import (
+    embed_text,
+    embedding_to_json,
+    embedding_from_json,
+    cosine_similarity,
+)
 
 
 app = FastAPI(
@@ -86,11 +91,30 @@ def create_tables():
                 main_question_id TEXT NOT NULL,
                 label TEXT NOT NULL,
                 text TEXT NOT NULL,
+                embedding TEXT,
                 FOREIGN KEY (main_question_id)
                     REFERENCES main_questions(id)
             )
             """
         )
+
+        # Migration for databases created before the embedding column existed
+        columns = connection.execute(
+            "PRAGMA table_info(sub_questions)"
+        ).fetchall()
+
+        column_names = [
+            column["name"]
+            for column in columns
+        ]
+
+        if "embedding" not in column_names:
+            connection.execute(
+                """
+                ALTER TABLE sub_questions
+                ADD COLUMN embedding TEXT
+                """
+            )
 
         connection.commit()
 
@@ -180,9 +204,7 @@ def get_paper_questions(paper_id: str):
 
             result.append(
                 {
-                    "question_number":
-                        main_row["question_number"],
-
+                    "question_number": main_row["question_number"],
                     "sub_questions": [
                         dict(row)
                         for row in sub_rows
@@ -213,9 +235,7 @@ async def upload_paper(
         )
 
     paper_id = str(uuid.uuid4())
-
     stored_filename = f"{paper_id}.pdf"
-
     destination = STORAGE_DIR / stored_filename
 
     with destination.open("wb") as buffer:
@@ -223,11 +243,9 @@ async def upload_paper(
 
     try:
         text = extract_text_from_pdf(destination)
-
         parsed_questions = split_into_questions(text)
 
     except Exception as error:
-
         destination.unlink(missing_ok=True)
 
         raise HTTPException(
@@ -285,21 +303,31 @@ async def upload_paper(
 
                 sub_question_id = str(uuid.uuid4())
 
+                embedding = embed_text(
+                    sub_question["text"]
+                )
+
+                embedding_json = embedding_to_json(
+                    embedding
+                )
+
                 connection.execute(
                     """
                     INSERT INTO sub_questions (
                         id,
                         main_question_id,
                         label,
-                        text
+                        text,
+                        embedding
                     )
-                    VALUES (?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
                     (
                         sub_question_id,
                         main_question_id,
                         sub_question["label"],
-                        sub_question["text"]
+                        sub_question["text"],
+                        embedding_json
                     )
                 )
 
@@ -314,12 +342,9 @@ async def upload_paper(
         "year": year,
         "exam": exam,
         "filename": file.filename,
-        "main_questions_found":
-            len(parsed_questions),
-        "sub_questions_found":
-            total_sub_questions
+        "main_questions_found": len(parsed_questions),
+        "sub_questions_found": total_sub_questions
     }
-
 
 
 @app.delete("/papers/{paper_id}")
@@ -391,6 +416,53 @@ def delete_paper(paper_id: str):
 
 
 
+@app.post("/backfill-embeddings")
+def backfill_embeddings():
+    with get_database() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT id, text
+            FROM sub_questions
+            WHERE embedding IS NULL
+               OR embedding = ''
+            """
+        ).fetchall()
+
+        updated = 0
+
+        for row in rows:
+            embedding = embed_text(row["text"])
+            embedding_json = embedding_to_json(embedding)
+
+            connection.execute(
+                """
+                UPDATE sub_questions
+                SET embedding = ?
+                WHERE id = ?
+                """,
+                (
+                    embedding_json,
+                    row["id"]
+                )
+            )
+
+            updated += 1
+
+        connection.commit()
+
+    return {
+        "message": "Embedding backfill complete",
+        "updated": updated
+    }
+
+
+
+
+
+
+
+
 @app.post("/search")
 def search_questions(request: SearchRequest):
     if not request.query.strip():
@@ -409,6 +481,7 @@ def search_questions(request: SearchRequest):
                 sq.id,
                 sq.label,
                 sq.text,
+                sq.embedding,
                 mq.question_number,
                 p.module,
                 p.year,
@@ -424,7 +497,16 @@ def search_questions(request: SearchRequest):
     results = []
 
     for row in rows:
-        question_embedding = embed_text(row["text"])
+
+        if row["embedding"]:
+            question_embedding = embedding_from_json(
+                row["embedding"]
+            )
+        else:
+            # Backward compatibility for old rows
+            question_embedding = embed_text(
+                row["text"]
+            )
 
         score = cosine_similarity(
             query_embedding,
