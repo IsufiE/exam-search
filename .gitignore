@@ -1,0 +1,21 @@
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Next.js
+frontend/node_modules/
+frontend/.next/
+
+# Database
+papers.db
+
+# Uploaded exam papers
+storage/*.pdf
+
+# Environment variables
+.env
+.env.local
+
+# macOS
+.DS_Store
