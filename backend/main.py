@@ -1,12 +1,15 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import shutil
 import sqlite3
 import uuid
 
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
 from pdf_parser import extract_text_from_pdf
 from question_parser import split_into_questions
+from search_engine import embed_text, cosine_similarity
 
 
 app = FastAPI(
@@ -17,7 +20,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -93,6 +99,15 @@ create_tables()
 
 
 # -------------------------
+# Request Models
+# -------------------------
+
+class SearchRequest(BaseModel):
+    query: str
+    limit: int = 5
+
+
+# -------------------------
 # Routes
 # -------------------------
 
@@ -112,7 +127,6 @@ def health():
 
 @app.get("/papers")
 def get_papers():
-
     with get_database() as connection:
 
         rows = connection.execute(
@@ -133,7 +147,6 @@ def get_papers():
 
 @app.get("/papers/{paper_id}/questions")
 def get_paper_questions(paper_id: str):
-
     with get_database() as connection:
 
         main_rows = connection.execute(
@@ -187,7 +200,6 @@ async def upload_paper(
     exam: str = Form(...),
     file: UploadFile = File(...)
 ):
-
     if not file.filename:
         raise HTTPException(
             status_code=400,
@@ -307,3 +319,134 @@ async def upload_paper(
         "sub_questions_found":
             total_sub_questions
     }
+
+
+
+@app.delete("/papers/{paper_id}")
+def delete_paper(paper_id: str):
+    with get_database() as connection:
+
+        paper = connection.execute(
+            """
+            SELECT stored_filename
+            FROM papers
+            WHERE id = ?
+            """,
+            (paper_id,)
+        ).fetchone()
+
+        if paper is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Paper not found"
+            )
+
+        main_questions = connection.execute(
+            """
+            SELECT id
+            FROM main_questions
+            WHERE paper_id = ?
+            """,
+            (paper_id,)
+        ).fetchall()
+
+        for main_question in main_questions:
+            connection.execute(
+                """
+                DELETE FROM sub_questions
+                WHERE main_question_id = ?
+                """,
+                (main_question["id"],)
+            )
+
+        connection.execute(
+            """
+            DELETE FROM main_questions
+            WHERE paper_id = ?
+            """,
+            (paper_id,)
+        )
+
+        connection.execute(
+            """
+            DELETE FROM papers
+            WHERE id = ?
+            """,
+            (paper_id,)
+        )
+
+        connection.commit()
+
+    pdf_path = STORAGE_DIR / paper["stored_filename"]
+
+    if pdf_path.exists():
+        pdf_path.unlink()
+
+    return {
+        "message": "Paper deleted successfully",
+        "id": paper_id
+    }
+
+
+
+
+
+@app.post("/search")
+def search_questions(request: SearchRequest):
+    if not request.query.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Search query cannot be empty"
+        )
+
+    query_embedding = embed_text(request.query)
+
+    with get_database() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT
+                sq.id,
+                sq.label,
+                sq.text,
+                mq.question_number,
+                p.module,
+                p.year,
+                p.exam
+            FROM sub_questions sq
+            JOIN main_questions mq
+                ON sq.main_question_id = mq.id
+            JOIN papers p
+                ON mq.paper_id = p.id
+            """
+        ).fetchall()
+
+    results = []
+
+    for row in rows:
+        question_embedding = embed_text(row["text"])
+
+        score = cosine_similarity(
+            query_embedding,
+            question_embedding
+        )
+
+        results.append(
+            {
+                "id": row["id"],
+                "module": row["module"],
+                "year": row["year"],
+                "exam": row["exam"],
+                "question_number":
+                    f"{row['question_number']}({row['label']})",
+                "text": row["text"],
+                "score": score,
+            }
+        )
+
+    results.sort(
+        key=lambda item: item["score"],
+        reverse=True
+    )
+
+    return results[:request.limit]
