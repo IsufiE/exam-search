@@ -5,6 +5,9 @@ import shutil
 import sqlite3
 import uuid
 
+from pdf_parser import extract_text_from_pdf
+from question_parser import split_into_questions
+
 
 app = FastAPI(
     title="Exam Search API",
@@ -59,6 +62,30 @@ def create_tables():
             """
         )
 
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS main_questions (
+                id TEXT PRIMARY KEY,
+                paper_id TEXT NOT NULL,
+                question_number TEXT NOT NULL,
+                FOREIGN KEY (paper_id) REFERENCES papers(id)
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sub_questions (
+                id TEXT PRIMARY KEY,
+                main_question_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                text TEXT NOT NULL,
+                FOREIGN KEY (main_question_id)
+                    REFERENCES main_questions(id)
+            )
+            """
+        )
+
         connection.commit()
 
 
@@ -104,6 +131,55 @@ def get_papers():
     return [dict(row) for row in rows]
 
 
+@app.get("/papers/{paper_id}/questions")
+def get_paper_questions(paper_id: str):
+
+    with get_database() as connection:
+
+        main_rows = connection.execute(
+            """
+            SELECT
+                id,
+                question_number
+            FROM main_questions
+            WHERE paper_id = ?
+            ORDER BY CAST(question_number AS INTEGER)
+            """,
+            (paper_id,)
+        ).fetchall()
+
+        result = []
+
+        for main_row in main_rows:
+
+            sub_rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    label,
+                    text
+                FROM sub_questions
+                WHERE main_question_id = ?
+                ORDER BY label
+                """,
+                (main_row["id"],)
+            ).fetchall()
+
+            result.append(
+                {
+                    "question_number":
+                        main_row["question_number"],
+
+                    "sub_questions": [
+                        dict(row)
+                        for row in sub_rows
+                    ]
+                }
+            )
+
+    return result
+
+
 @app.post("/papers")
 async def upload_paper(
     module: str = Form(...),
@@ -133,6 +209,20 @@ async def upload_paper(
     with destination.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    try:
+        text = extract_text_from_pdf(destination)
+
+        parsed_questions = split_into_questions(text)
+
+    except Exception as error:
+
+        destination.unlink(missing_ok=True)
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not parse PDF: {error}"
+        )
+
     with get_database() as connection:
 
         connection.execute(
@@ -157,13 +247,63 @@ async def upload_paper(
             )
         )
 
+        total_sub_questions = 0
+
+        for question in parsed_questions:
+
+            main_question_id = str(uuid.uuid4())
+
+            connection.execute(
+                """
+                INSERT INTO main_questions (
+                    id,
+                    paper_id,
+                    question_number
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    main_question_id,
+                    paper_id,
+                    question["question_number"]
+                )
+            )
+
+            for sub_question in question["sub_questions"]:
+
+                sub_question_id = str(uuid.uuid4())
+
+                connection.execute(
+                    """
+                    INSERT INTO sub_questions (
+                        id,
+                        main_question_id,
+                        label,
+                        text
+                    )
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        sub_question_id,
+                        main_question_id,
+                        sub_question["label"],
+                        sub_question["text"]
+                    )
+                )
+
+                total_sub_questions += 1
+
         connection.commit()
 
     return {
-        "message": "Paper uploaded successfully",
+        "message": "Paper uploaded and parsed successfully",
         "id": paper_id,
         "module": module,
         "year": year,
         "exam": exam,
-        "filename": file.filename
+        "filename": file.filename,
+        "main_questions_found":
+            len(parsed_questions),
+        "sub_questions_found":
+            total_sub_questions
     }
