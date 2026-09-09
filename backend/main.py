@@ -128,6 +128,7 @@ create_tables()
 
 class SearchRequest(BaseModel):
     query: str
+    module: str
     limit: int = 5
 
 
@@ -491,10 +492,17 @@ def search_questions(request: SearchRequest):
             detail="Search query cannot be empty"
         )
 
+    if not request.module.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Module is required"
+        )
+
+    normalized_module = request.module.strip().upper()
+
     query_embedding = embed_text(request.query)
 
     with get_database() as connection:
-
         rows = connection.execute(
             """
             SELECT
@@ -511,13 +519,14 @@ def search_questions(request: SearchRequest):
                 ON sq.main_question_id = mq.id
             JOIN papers p
                 ON mq.paper_id = p.id
-            """
+            WHERE p.module = ?
+            """,
+            (normalized_module,)
         ).fetchall()
 
     results = []
 
     for row in rows:
-
         if row["embedding"]:
             question_embedding = embedding_from_json(
                 row["embedding"]

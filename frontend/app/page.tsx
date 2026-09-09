@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Paper = {
   id: string;
@@ -45,6 +45,7 @@ export default function Home() {
   // Search state
   // -------------------------
 
+  const [selectedModule, setSelectedModule] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -55,6 +56,16 @@ export default function Home() {
   // -------------------------
 
   const API = "http://127.0.0.1:8000";
+
+  // -------------------------
+  // Available modules
+  // -------------------------
+
+  const availableModules = useMemo(() => {
+    return Array.from(
+      new Set(papers.map((paper) => paper.module))
+    ).sort();
+  }, [papers]);
 
   // -------------------------
   // Load papers
@@ -83,6 +94,19 @@ export default function Home() {
   useEffect(() => {
     loadPapers();
   }, []);
+
+  // If the selected module disappears from the library,
+  // clear it automatically.
+  useEffect(() => {
+    if (
+      selectedModule &&
+      !availableModules.includes(selectedModule)
+    ) {
+      setSelectedModule("");
+      setSearchResults([]);
+      setSearchMessage("");
+    }
+  }, [availableModules, selectedModule]);
 
   // -------------------------
   // Upload paper
@@ -153,9 +177,12 @@ export default function Home() {
     try {
       setDeletingPaperId(paperId);
 
-      const response = await fetch(`${API}/papers/${paperId}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `${API}/papers/${paperId}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       const data = await response.json();
 
@@ -163,13 +190,12 @@ export default function Home() {
         throw new Error(data.detail || "Delete failed");
       }
 
-      // Remove immediately from frontend
       setPapers((currentPapers) =>
-        currentPapers.filter((paper) => paper.id !== paperId)
+        currentPapers.filter(
+          (paper) => paper.id !== paperId
+        )
       );
 
-      // Clear old search results because they may contain
-      // questions from the deleted paper
       setSearchResults([]);
       setSearchMessage("");
     } catch (error) {
@@ -188,6 +214,11 @@ export default function Home() {
   // -------------------------
 
   async function handleSearch() {
+    if (!selectedModule) {
+      setSearchMessage("Select a module first.");
+      return;
+    }
+
     if (!searchQuery.trim()) {
       setSearchMessage("Paste a question first.");
       return;
@@ -205,6 +236,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           query: searchQuery,
+          module: selectedModule,
           limit: 5,
         }),
       });
@@ -218,7 +250,9 @@ export default function Home() {
       setSearchResults(data);
 
       if (data.length === 0) {
-        setSearchMessage("No similar questions found.");
+        setSearchMessage(
+          `No similar questions found in ${selectedModule}.`
+        );
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -238,6 +272,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <div className="mx-auto max-w-5xl px-6 py-20">
+
         {/* HEADER */}
 
         <div className="mb-16">
@@ -250,8 +285,8 @@ export default function Home() {
           </h1>
 
           <p className="mt-5 max-w-2xl text-lg text-zinc-400">
-            Upload exam papers, then paste any question to find semantically
-            similar questions from previous exams.
+            Select a module, paste a question, and find
+            semantically similar questions from previous exams.
           </p>
         </div>
 
@@ -263,22 +298,69 @@ export default function Home() {
           </p>
 
           <h2 className="text-2xl font-semibold">
-            Paste a question
+            Search past-paper questions
           </h2>
+
+          {/* Module selector */}
+
+          <div className="mt-6">
+            <label className="mb-2 block text-sm text-zinc-400">
+              Module
+            </label>
+
+            <select
+              value={selectedModule}
+              onChange={(event) => {
+                setSelectedModule(event.target.value);
+                setSearchResults([]);
+                setSearchMessage("");
+              }}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-zinc-500"
+            >
+              <option value="">
+                Select a module
+              </option>
+
+              {availableModules.map((moduleName) => (
+                <option
+                  key={moduleName}
+                  value={moduleName}
+                >
+                  {moduleName}
+                </option>
+              ))}
+            </select>
+
+            {availableModules.length === 0 && (
+              <p className="mt-2 text-sm text-zinc-500">
+                Upload a paper first to add a searchable module.
+              </p>
+            )}
+          </div>
+
+          {/* Search textarea */}
 
           <textarea
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onChange={(event) =>
+              setSearchQuery(event.target.value)
+            }
             placeholder="e.g. How do regular expressions help with tokenization?"
             className="mt-6 h-36 w-full resize-none rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-white outline-none focus:border-zinc-500"
           />
 
           <button
             onClick={handleSearch}
-            disabled={searching || !searchQuery.trim()}
+            disabled={
+              searching ||
+              !searchQuery.trim() ||
+              !selectedModule
+            }
             className="mt-4 rounded-lg bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {searching ? "Searching..." : "Find similar questions"}
+            {searching
+              ? "Searching..."
+              : "Find similar questions"}
           </button>
 
           {searchMessage && (
@@ -287,10 +369,14 @@ export default function Home() {
             </p>
           )}
 
+          {/* Search results */}
+
           {searchResults.length > 0 && (
             <div className="mt-8 space-y-4">
               {searchResults.map((result, index) => {
-                const similarity = Math.round(result.score * 100);
+                const similarity = Math.round(
+                  result.score * 100
+                );
 
                 return (
                   <article
@@ -310,7 +396,8 @@ export default function Home() {
                         </div>
 
                         <h3 className="mt-4 text-lg font-semibold">
-                          {result.module} · {result.year} · {result.exam}
+                          {result.module} · {result.year} ·{" "}
+                          {result.exam}
                         </h3>
 
                         <p className="mt-1 text-sm text-zinc-400">
@@ -348,7 +435,9 @@ export default function Home() {
             <input
               type="text"
               value={module}
-              onChange={(event) => setModule(event.target.value)}
+              onChange={(event) =>
+                setModule(event.target.value)
+              }
               placeholder="e.g. CS404"
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none focus:border-zinc-500"
             />
@@ -363,7 +452,9 @@ export default function Home() {
               <input
                 type="number"
                 value={year}
-                onChange={(event) => setYear(event.target.value)}
+                onChange={(event) =>
+                  setYear(event.target.value)
+                }
                 placeholder="2023"
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none focus:border-zinc-500"
               />
@@ -377,7 +468,9 @@ export default function Home() {
               <input
                 type="text"
                 value={exam}
-                onChange={(event) => setExam(event.target.value)}
+                onChange={(event) =>
+                  setExam(event.target.value)
+                }
                 placeholder="January"
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none focus:border-zinc-500"
               />
@@ -400,7 +493,8 @@ export default function Home() {
               accept=".pdf"
               className="hidden"
               onChange={(event) => {
-                const selectedFile = event.target.files?.[0];
+                const selectedFile =
+                  event.target.files?.[0];
 
                 if (selectedFile) {
                   setFile(selectedFile);
@@ -414,7 +508,9 @@ export default function Home() {
             disabled={!file || uploading}
             className="mt-6 w-full rounded-lg bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {uploading ? "Uploading..." : "Upload paper"}
+            {uploading
+              ? "Uploading..."
+              : "Upload paper"}
           </button>
 
           {message && (
@@ -439,7 +535,10 @@ export default function Home() {
             </div>
 
             <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-sm text-zinc-400">
-              {papers.length} {papers.length === 1 ? "paper" : "papers"}
+              {papers.length}{" "}
+              {papers.length === 1
+                ? "paper"
+                : "papers"}
             </span>
           </div>
 
@@ -480,8 +579,12 @@ export default function Home() {
                     </span>
 
                     <button
-                      onClick={() => handleDeletePaper(paper.id)}
-                      disabled={deletingPaperId === paper.id}
+                      onClick={() =>
+                        handleDeletePaper(paper.id)
+                      }
+                      disabled={
+                        deletingPaperId === paper.id
+                      }
                       className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950/60 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {deletingPaperId === paper.id
