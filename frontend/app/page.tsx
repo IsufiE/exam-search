@@ -46,6 +46,9 @@ export default function Home() {
   // -------------------------
 
   const [selectedModule, setSelectedModule] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [selectedExam, setSelectedExam] = useState("");
+
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -58,14 +61,50 @@ export default function Home() {
   const API = "http://127.0.0.1:8000";
 
   // -------------------------
-  // Available modules
+  // Search filter options
   // -------------------------
 
   const availableModules = useMemo(() => {
     return Array.from(
-      new Set(papers.map((paper) => paper.module))
+      new Set(
+        papers.map((paper) => paper.module)
+      )
     ).sort();
   }, [papers]);
+
+  const availableYears = useMemo(() => {
+    return Array.from(
+      new Set(
+        papers
+          .filter(
+            (paper) =>
+              !selectedModule ||
+              paper.module === selectedModule
+          )
+          .map((paper) => paper.year)
+      )
+    ).sort((a, b) => b - a);
+  }, [papers, selectedModule]);
+
+  const availableExams = useMemo(() => {
+    return Array.from(
+      new Set(
+        papers
+          .filter(
+            (paper) =>
+              (!selectedModule ||
+                paper.module === selectedModule) &&
+              (!selectedYear ||
+                paper.year === Number(selectedYear))
+          )
+          .map((paper) => paper.exam)
+      )
+    ).sort();
+  }, [
+    papers,
+    selectedModule,
+    selectedYear
+  ]);
 
   // -------------------------
   // Load papers
@@ -75,10 +114,14 @@ export default function Home() {
     try {
       setLoadingPapers(true);
 
-      const response = await fetch(`${API}/papers`);
+      const response = await fetch(
+        `${API}/papers`
+      );
 
       if (!response.ok) {
-        throw new Error("Could not load papers");
+        throw new Error(
+          "Could not load papers"
+        );
       }
 
       const data = await response.json();
@@ -95,49 +138,82 @@ export default function Home() {
     loadPapers();
   }, []);
 
-  // If the selected module disappears from the library,
-  // clear it automatically.
+  // Clear module selection if that module disappears
   useEffect(() => {
     if (
       selectedModule &&
       !availableModules.includes(selectedModule)
     ) {
       setSelectedModule("");
+      setSelectedYear("");
+      setSelectedExam("");
       setSearchResults([]);
       setSearchMessage("");
     }
-  }, [availableModules, selectedModule]);
+  }, [
+    availableModules,
+    selectedModule
+  ]);
 
   // -------------------------
   // Upload paper
   // -------------------------
 
   async function handleUpload() {
-    if (!file || !module || !year || !exam) {
-      setMessage("Please complete all fields.");
+    if (
+      !file ||
+      !module ||
+      !year ||
+      !exam
+    ) {
+      setMessage(
+        "Please complete all fields."
+      );
       return;
     }
 
     const formData = new FormData();
 
-    formData.append("module", module);
-    formData.append("year", year);
-    formData.append("exam", exam);
-    formData.append("file", file);
+    formData.append(
+      "module",
+      module
+    );
+
+    formData.append(
+      "year",
+      year
+    );
+
+    formData.append(
+      "exam",
+      exam
+    );
+
+    formData.append(
+      "file",
+      file
+    );
 
     try {
       setUploading(true);
       setMessage("");
 
-      const response = await fetch(`${API}/papers`, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        `${API}/papers`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Upload failed");
+        throw new Error(
+          data.detail ||
+          "Upload failed"
+        );
       }
 
       setMessage(
@@ -152,9 +228,13 @@ export default function Home() {
       await loadPapers();
     } catch (error) {
       if (error instanceof Error) {
-        setMessage(error.message);
+        setMessage(
+          error.message
+        );
       } else {
-        setMessage("Something went wrong.");
+        setMessage(
+          "Something went wrong."
+        );
       }
     } finally {
       setUploading(false);
@@ -165,47 +245,65 @@ export default function Home() {
   // Delete paper
   // -------------------------
 
-  async function handleDeletePaper(paperId: string) {
-    const confirmed = window.confirm(
-      "Delete this paper and all of its parsed questions?"
-    );
+  async function handleDeletePaper(
+    paperId: string
+  ) {
+    const confirmed =
+      window.confirm(
+        "Delete this paper and all of its parsed questions?"
+      );
 
     if (!confirmed) {
       return;
     }
 
     try {
-      setDeletingPaperId(paperId);
-
-      const response = await fetch(
-        `${API}/papers/${paperId}`,
-        {
-          method: "DELETE",
-        }
+      setDeletingPaperId(
+        paperId
       );
 
-      const data = await response.json();
+      const response =
+        await fetch(
+          `${API}/papers/${paperId}`,
+          {
+            method: "DELETE",
+          }
+        );
+
+      const data =
+        await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Delete failed");
+        throw new Error(
+          data.detail ||
+          "Delete failed"
+        );
       }
 
-      setPapers((currentPapers) =>
-        currentPapers.filter(
-          (paper) => paper.id !== paperId
-        )
+      setPapers(
+        (currentPapers) =>
+          currentPapers.filter(
+            (paper) =>
+              paper.id !== paperId
+          )
       );
 
       setSearchResults([]);
       setSearchMessage("");
     } catch (error) {
       if (error instanceof Error) {
-        alert(error.message);
+        alert(
+          error.message
+        );
       } else {
-        alert("Something went wrong.");
+        alert(
+          "Something went wrong."
+        );
       }
     } finally {
-      setDeletingPaperId(null);
+      setDeletingPaperId(
+        null
+      );
     }
   }
 
@@ -215,12 +313,16 @@ export default function Home() {
 
   async function handleSearch() {
     if (!selectedModule) {
-      setSearchMessage("Select a module first.");
+      setSearchMessage(
+        "Select a module first."
+      );
       return;
     }
 
     if (!searchQuery.trim()) {
-      setSearchMessage("Paste a question first.");
+      setSearchMessage(
+        "Paste a question first."
+      );
       return;
     }
 
@@ -229,36 +331,66 @@ export default function Home() {
       setSearchMessage("");
       setSearchResults([]);
 
-      const response = await fetch(`${API}/search`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query: searchQuery,
-          module: selectedModule,
-          limit: 5,
-        }),
-      });
+      const response =
+        await fetch(
+          `${API}/search`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              query:
+                searchQuery,
 
-      const data = await response.json();
+              module:
+                selectedModule,
+
+              year:
+                selectedYear
+                  ? Number(
+                      selectedYear
+                    )
+                  : null,
+
+              exam:
+                selectedExam ||
+                null,
+
+              limit: 5,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Search failed");
+        throw new Error(
+          data.detail ||
+          "Search failed"
+        );
       }
 
-      setSearchResults(data);
+      setSearchResults(
+        data
+      );
 
       if (data.length === 0) {
         setSearchMessage(
-          `No similar questions found in ${selectedModule}.`
+          "No similar questions found for these filters."
         );
       }
     } catch (error) {
       if (error instanceof Error) {
-        setSearchMessage(error.message);
+        setSearchMessage(
+          error.message
+        );
       } else {
-        setSearchMessage("Something went wrong.");
+        setSearchMessage(
+          "Something went wrong."
+        );
       }
     } finally {
       setSearching(false);
@@ -271,11 +403,13 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
+
       <div className="mx-auto max-w-5xl px-6 py-20">
 
         {/* HEADER */}
 
         <div className="mb-16">
+
           <p className="mb-3 text-sm font-medium text-zinc-500">
             EXAM SEARCH
           </p>
@@ -285,14 +419,17 @@ export default function Home() {
           </h1>
 
           <p className="mt-5 max-w-2xl text-lg text-zinc-400">
-            Select a module, paste a question, and find
-            semantically similar questions from previous exams.
+            Select a module, paste a question,
+            and find semantically similar
+            questions from previous exams.
           </p>
+
         </div>
 
         {/* SEARCH */}
 
         <section className="mb-16 rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+
           <p className="mb-2 text-sm font-medium text-zinc-500">
             SEMANTIC SEARCH
           </p>
@@ -301,56 +438,212 @@ export default function Home() {
             Search past-paper questions
           </h2>
 
-          {/* Module selector */}
+          {/* MODULE */}
 
           <div className="mt-6">
+
             <label className="mb-2 block text-sm text-zinc-400">
               Module
             </label>
 
             <select
-              value={selectedModule}
-              onChange={(event) => {
-                setSelectedModule(event.target.value);
-                setSearchResults([]);
-                setSearchMessage("");
+              value={
+                selectedModule
+              }
+              onChange={(
+                event
+              ) => {
+                setSelectedModule(
+                  event.target.value
+                );
+
+                setSelectedYear(
+                  ""
+                );
+
+                setSelectedExam(
+                  ""
+                );
+
+                setSearchResults(
+                  []
+                );
+
+                setSearchMessage(
+                  ""
+                );
               }}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-zinc-500"
             >
+
               <option value="">
                 Select a module
               </option>
 
-              {availableModules.map((moduleName) => (
-                <option
-                  key={moduleName}
-                  value={moduleName}
-                >
-                  {moduleName}
-                </option>
-              ))}
+              {availableModules.map(
+                (
+                  moduleName
+                ) => (
+                  <option
+                    key={
+                      moduleName
+                    }
+                    value={
+                      moduleName
+                    }
+                  >
+                    {moduleName}
+                  </option>
+                )
+              )}
+
             </select>
 
-            {availableModules.length === 0 && (
-              <p className="mt-2 text-sm text-zinc-500">
-                Upload a paper first to add a searchable module.
-              </p>
-            )}
           </div>
 
-          {/* Search textarea */}
+          {/* YEAR + EXAM */}
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+
+            <div>
+
+              <label className="mb-2 block text-sm text-zinc-400">
+                Year
+              </label>
+
+              <select
+                value={
+                  selectedYear
+                }
+                onChange={(
+                  event
+                ) => {
+                  setSelectedYear(
+                    event.target.value
+                  );
+
+                  setSelectedExam(
+                    ""
+                  );
+
+                  setSearchResults(
+                    []
+                  );
+
+                  setSearchMessage(
+                    ""
+                  );
+                }}
+                disabled={
+                  !selectedModule
+                }
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-zinc-500 disabled:opacity-40"
+              >
+
+                <option value="">
+                  All years
+                </option>
+
+                {availableYears.map(
+                  (
+                    yearValue
+                  ) => (
+                    <option
+                      key={
+                        yearValue
+                      }
+                      value={
+                        yearValue
+                      }
+                    >
+                      {yearValue}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+            <div>
+
+              <label className="mb-2 block text-sm text-zinc-400">
+                Exam
+              </label>
+
+              <select
+                value={
+                  selectedExam
+                }
+                onChange={(
+                  event
+                ) => {
+                  setSelectedExam(
+                    event.target.value
+                  );
+
+                  setSearchResults(
+                    []
+                  );
+
+                  setSearchMessage(
+                    ""
+                  );
+                }}
+                disabled={
+                  !selectedModule
+                }
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-zinc-500 disabled:opacity-40"
+              >
+
+                <option value="">
+                  All exams
+                </option>
+
+                {availableExams.map(
+                  (
+                    examName
+                  ) => (
+                    <option
+                      key={
+                        examName
+                      }
+                      value={
+                        examName
+                      }
+                    >
+                      {examName}
+                    </option>
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+          </div>
+
+          {/* QUERY */}
 
           <textarea
-            value={searchQuery}
-            onChange={(event) =>
-              setSearchQuery(event.target.value)
+            value={
+              searchQuery
+            }
+            onChange={(
+              event
+            ) =>
+              setSearchQuery(
+                event.target.value
+              )
             }
             placeholder="e.g. How do regular expressions help with tokenization?"
             className="mt-6 h-36 w-full resize-none rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-white outline-none focus:border-zinc-500"
           />
 
           <button
-            onClick={handleSearch}
+            onClick={
+              handleSearch
+            }
             disabled={
               searching ||
               !searchQuery.trim() ||
@@ -369,56 +662,79 @@ export default function Home() {
             </p>
           )}
 
-          {/* Search results */}
+          {/* RESULTS */}
 
-          {searchResults.length > 0 && (
+          {searchResults.length >
+            0 && (
+
             <div className="mt-8 space-y-4">
-              {searchResults.map((result, index) => {
-                const similarity = Math.round(
-                  result.score * 100
-                );
 
-                return (
-                  <article
-                    key={result.id}
-                    className="rounded-xl border border-zinc-800 bg-zinc-950 p-6"
-                  >
-                    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                            #{index + 1}
-                          </span>
+              {searchResults.map(
+                (
+                  result,
+                  index
+                ) => {
 
-                          <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                            {similarity}% similarity
-                          </span>
-                        </div>
+                  const similarity =
+                    Math.round(
+                      result.score *
+                      100
+                    );
 
-                        <h3 className="mt-4 text-lg font-semibold">
-                          {result.module} · {result.year} ·{" "}
-                          {result.exam}
-                        </h3>
+                  return (
 
-                        <p className="mt-1 text-sm text-zinc-400">
-                          Question {result.question_number}
-                        </p>
+                    <article
+                      key={
+                        result.id
+                      }
+                      className="rounded-xl border border-zinc-800 bg-zinc-950 p-6"
+                    >
+
+                      <div className="flex flex-wrap items-center gap-2">
+
+                        <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
+                          #{index + 1}
+                        </span>
+
+                        <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
+                          {similarity}% similarity
+                        </span>
+
                       </div>
-                    </div>
 
-                    <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
-                      {result.text}
-                    </p>
-                  </article>
-                );
-              })}
+                      <h3 className="mt-4 text-lg font-semibold">
+                        {result.module} ·{" "}
+                        {result.year} ·{" "}
+                        {result.exam}
+                      </h3>
+
+                      <p className="mt-1 text-sm text-zinc-400">
+                        Question{" "}
+                        {
+                          result.question_number
+                        }
+                      </p>
+
+                      <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                        {result.text}
+                      </p>
+
+                    </article>
+
+                  );
+                }
+              )}
+
             </div>
+
           )}
+
         </section>
 
         {/* UPLOAD */}
 
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+
           <p className="mb-2 text-sm font-medium text-zinc-500">
             PAPER LIBRARY
           </p>
@@ -428,6 +744,7 @@ export default function Home() {
           </h2>
 
           <div className="mb-6">
+
             <label className="mb-2 block text-sm text-zinc-400">
               Module
             </label>
@@ -435,16 +752,23 @@ export default function Home() {
             <input
               type="text"
               value={module}
-              onChange={(event) =>
-                setModule(event.target.value)
+              onChange={(
+                event
+              ) =>
+                setModule(
+                  event.target.value
+                )
               }
               placeholder="e.g. CS404"
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none focus:border-zinc-500"
             />
+
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">
+
             <div>
+
               <label className="mb-2 block text-sm text-zinc-400">
                 Year
               </label>
@@ -452,15 +776,21 @@ export default function Home() {
               <input
                 type="number"
                 value={year}
-                onChange={(event) =>
-                  setYear(event.target.value)
+                onChange={(
+                  event
+                ) =>
+                  setYear(
+                    event.target.value
+                  )
                 }
                 placeholder="2023"
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none focus:border-zinc-500"
               />
+
             </div>
 
             <div>
+
               <label className="mb-2 block text-sm text-zinc-400">
                 Exam
               </label>
@@ -468,18 +798,27 @@ export default function Home() {
               <input
                 type="text"
                 value={exam}
-                onChange={(event) =>
-                  setExam(event.target.value)
+                onChange={(
+                  event
+                ) =>
+                  setExam(
+                    event.target.value
+                  )
                 }
                 placeholder="January"
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none focus:border-zinc-500"
               />
+
             </div>
+
           </div>
 
           <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 px-6 py-14 transition hover:border-zinc-500 hover:bg-zinc-800/50">
+
             <span className="text-lg font-medium">
-              {file ? file.name : "Choose a PDF"}
+              {file
+                ? file.name
+                : "Choose a PDF"}
             </span>
 
             <span className="mt-2 text-sm text-zinc-500">
@@ -492,20 +831,33 @@ export default function Home() {
               type="file"
               accept=".pdf"
               className="hidden"
-              onChange={(event) => {
+              onChange={(
+                event
+              ) => {
                 const selectedFile =
-                  event.target.files?.[0];
+                  event.target
+                    .files?.[0];
 
-                if (selectedFile) {
-                  setFile(selectedFile);
+                if (
+                  selectedFile
+                ) {
+                  setFile(
+                    selectedFile
+                  );
                 }
               }}
             />
+
           </label>
 
           <button
-            onClick={handleUpload}
-            disabled={!file || uploading}
+            onClick={
+              handleUpload
+            }
+            disabled={
+              !file ||
+              uploading
+            }
             className="mt-6 w-full rounded-lg bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {uploading
@@ -518,13 +870,17 @@ export default function Home() {
               {message}
             </p>
           )}
+
         </section>
 
         {/* LIBRARY */}
 
         <section className="mt-16">
+
           <div className="mb-6 flex items-end justify-between">
+
             <div>
+
               <p className="mb-2 text-sm font-medium text-zinc-500">
                 LIBRARY
               </p>
@@ -532,6 +888,7 @@ export default function Home() {
               <h2 className="text-2xl font-semibold">
                 Past papers
               </h2>
+
             </div>
 
             <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-sm text-zinc-400">
@@ -540,64 +897,101 @@ export default function Home() {
                 ? "paper"
                 : "papers"}
             </span>
+
           </div>
 
           {loadingPapers ? (
+
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
               Loading papers...
             </div>
+
           ) : papers.length === 0 ? (
+
             <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">
+
               <p className="font-medium text-zinc-300">
                 No papers uploaded yet.
               </p>
+
             </div>
+
           ) : (
+
             <div className="space-y-3">
-              {papers.map((paper) => (
-                <div
-                  key={paper.id}
-                  className="flex flex-col justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-5 md:flex-row md:items-center"
-                >
-                  <div>
-                    <h3 className="font-medium">
-                      {paper.module}
-                    </h3>
 
-                    <p className="mt-1 text-sm text-zinc-400">
-                      {paper.year} · {paper.exam}
-                    </p>
+              {papers.map(
+                (
+                  paper
+                ) => (
 
-                    <p className="mt-2 text-xs text-zinc-600">
-                      {paper.original_filename}
-                    </p>
+                  <div
+                    key={
+                      paper.id
+                    }
+                    className="flex flex-col justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-5 md:flex-row md:items-center"
+                  >
+
+                    <div>
+
+                      <h3 className="font-medium">
+                        {
+                          paper.module
+                        }
+                      </h3>
+
+                      <p className="mt-1 text-sm text-zinc-400">
+                        {paper.year} ·{" "}
+                        {paper.exam}
+                      </p>
+
+                      <p className="mt-2 text-xs text-zinc-600">
+                        {
+                          paper.original_filename
+                        }
+                      </p>
+
+                    </div>
+
+                    <div className="flex items-center gap-3">
+
+                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">
+                        PDF
+                      </span>
+
+                      <button
+                        onClick={() =>
+                          handleDeletePaper(
+                            paper.id
+                          )
+                        }
+                        disabled={
+                          deletingPaperId ===
+                          paper.id
+                        }
+                        className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950/60 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {deletingPaperId ===
+                        paper.id
+                          ? "Deleting..."
+                          : "Delete"}
+                      </button>
+
+                    </div>
+
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">
-                      PDF
-                    </span>
+                )
+              )}
 
-                    <button
-                      onClick={() =>
-                        handleDeletePaper(paper.id)
-                      }
-                      disabled={
-                        deletingPaperId === paper.id
-                      }
-                      className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950/60 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {deletingPaperId === paper.id
-                        ? "Deleting..."
-                        : "Delete"}
-                    </button>
-                  </div>
-                </div>
-              ))}
             </div>
+
           )}
+
         </section>
+
       </div>
+
     </main>
   );
 }

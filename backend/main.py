@@ -129,6 +129,8 @@ create_tables()
 class SearchRequest(BaseModel):
     query: str
     module: str
+    year: int | None = None
+    exam: str | None = None
     limit: int = 5
 
 
@@ -500,33 +502,52 @@ def search_questions(request: SearchRequest):
 
     normalized_module = request.module.strip().upper()
 
+    normalized_exam = (
+        request.exam.strip()
+        if request.exam
+        else None
+    )
+
     query_embedding = embed_text(request.query)
+
+    sql_query = """
+        SELECT
+            sq.id,
+            sq.label,
+            sq.text,
+            sq.embedding,
+            mq.question_number,
+            p.module,
+            p.year,
+            p.exam
+        FROM sub_questions sq
+        JOIN main_questions mq
+            ON sq.main_question_id = mq.id
+        JOIN papers p
+            ON mq.paper_id = p.id
+        WHERE p.module = ?
+    """
+
+    params = [normalized_module]
+
+    if request.year is not None:
+        sql_query += " AND p.year = ?"
+        params.append(request.year)
+
+    if normalized_exam:
+        sql_query += " AND p.exam = ?"
+        params.append(normalized_exam)
 
     with get_database() as connection:
         rows = connection.execute(
-            """
-            SELECT
-                sq.id,
-                sq.label,
-                sq.text,
-                sq.embedding,
-                mq.question_number,
-                p.module,
-                p.year,
-                p.exam
-            FROM sub_questions sq
-            JOIN main_questions mq
-                ON sq.main_question_id = mq.id
-            JOIN papers p
-                ON mq.paper_id = p.id
-            WHERE p.module = ?
-            """,
-            (normalized_module,)
+            sql_query,
+            params
         ).fetchall()
 
     results = []
 
     for row in rows:
+
         if row["embedding"]:
             question_embedding = embedding_from_json(
                 row["embedding"]
