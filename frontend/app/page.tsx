@@ -21,22 +21,44 @@ type SearchResult = {
 };
 
 export default function Home() {
+  // -------------------------
+  // Upload state
+  // -------------------------
+
   const [module, setModule] = useState("");
   const [year, setYear] = useState("");
   const [exam, setExam] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
-  const [papers, setPapers] = useState<Paper[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [loadingPapers, setLoadingPapers] = useState(true);
   const [message, setMessage] = useState("");
+
+  // -------------------------
+  // Paper library state
+  // -------------------------
+
+  const [papers, setPapers] = useState<Paper[]>([]);
+  const [loadingPapers, setLoadingPapers] = useState(true);
+  const [deletingPaperId, setDeletingPaperId] = useState<string | null>(null);
+
+  // -------------------------
+  // Search state
+  // -------------------------
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchMessage, setSearchMessage] = useState("");
 
+  // -------------------------
+  // API
+  // -------------------------
+
   const API = "http://127.0.0.1:8000";
+
+  // -------------------------
+  // Load papers
+  // -------------------------
 
   async function loadPapers() {
     try {
@@ -49,6 +71,7 @@ export default function Home() {
       }
 
       const data = await response.json();
+
       setPapers(data);
     } catch (error) {
       console.error(error);
@@ -60,6 +83,10 @@ export default function Home() {
   useEffect(() => {
     loadPapers();
   }, []);
+
+  // -------------------------
+  // Upload paper
+  // -------------------------
 
   async function handleUpload() {
     if (!file || !module || !year || !exam) {
@@ -110,6 +137,56 @@ export default function Home() {
     }
   }
 
+  // -------------------------
+  // Delete paper
+  // -------------------------
+
+  async function handleDeletePaper(paperId: string) {
+    const confirmed = window.confirm(
+      "Delete this paper and all of its parsed questions?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingPaperId(paperId);
+
+      const response = await fetch(`${API}/papers/${paperId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Delete failed");
+      }
+
+      // Remove immediately from frontend
+      setPapers((currentPapers) =>
+        currentPapers.filter((paper) => paper.id !== paperId)
+      );
+
+      // Clear old search results because they may contain
+      // questions from the deleted paper
+      setSearchResults([]);
+      setSearchMessage("");
+    } catch (error) {
+      if (error instanceof Error) {
+        alert(error.message);
+      } else {
+        alert("Something went wrong.");
+      }
+    } finally {
+      setDeletingPaperId(null);
+    }
+  }
+
+  // -------------------------
+  // Semantic search
+  // -------------------------
+
   async function handleSearch() {
     if (!searchQuery.trim()) {
       setSearchMessage("Paste a question first.");
@@ -154,9 +231,14 @@ export default function Home() {
     }
   }
 
+  // -------------------------
+  // UI
+  // -------------------------
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <div className="mx-auto max-w-5xl px-6 py-20">
+        {/* HEADER */}
 
         <div className="mb-16">
           <p className="mb-3 text-sm font-medium text-zinc-500">
@@ -174,6 +256,7 @@ export default function Home() {
         </div>
 
         {/* SEARCH */}
+
         <section className="mb-16 rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
           <p className="mb-2 text-sm font-medium text-zinc-500">
             SEMANTIC SEARCH
@@ -185,7 +268,7 @@ export default function Home() {
 
           <textarea
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="e.g. How do regular expressions help with tokenization?"
             className="mt-6 h-36 w-full resize-none rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-white outline-none focus:border-zinc-500"
           />
@@ -247,6 +330,7 @@ export default function Home() {
         </section>
 
         {/* UPLOAD */}
+
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
           <p className="mb-2 text-sm font-medium text-zinc-500">
             PAPER LIBRARY
@@ -264,7 +348,7 @@ export default function Home() {
             <input
               type="text"
               value={module}
-              onChange={(e) => setModule(e.target.value)}
+              onChange={(event) => setModule(event.target.value)}
               placeholder="e.g. CS404"
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none focus:border-zinc-500"
             />
@@ -279,7 +363,7 @@ export default function Home() {
               <input
                 type="number"
                 value={year}
-                onChange={(e) => setYear(e.target.value)}
+                onChange={(event) => setYear(event.target.value)}
                 placeholder="2023"
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none focus:border-zinc-500"
               />
@@ -293,7 +377,7 @@ export default function Home() {
               <input
                 type="text"
                 value={exam}
-                onChange={(e) => setExam(e.target.value)}
+                onChange={(event) => setExam(event.target.value)}
                 placeholder="January"
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none focus:border-zinc-500"
               />
@@ -306,7 +390,9 @@ export default function Home() {
             </span>
 
             <span className="mt-2 text-sm text-zinc-500">
-              {file ? "Ready to upload" : "Click here to select a past paper"}
+              {file
+                ? "Ready to upload"
+                : "Click here to select a past paper"}
             </span>
 
             <input
@@ -339,6 +425,7 @@ export default function Home() {
         </section>
 
         {/* LIBRARY */}
+
         <section className="mt-16">
           <div className="mb-6 flex items-end justify-between">
             <div>
@@ -387,15 +474,26 @@ export default function Home() {
                     </p>
                   </div>
 
-                  <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">
-                    PDF
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">
+                      PDF
+                    </span>
+
+                    <button
+                      onClick={() => handleDeletePaper(paper.id)}
+                      disabled={deletingPaperId === paper.id}
+                      className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950/60 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {deletingPaperId === paper.id
+                        ? "Deleting..."
+                        : "Delete"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </section>
-
       </div>
     </main>
   );
