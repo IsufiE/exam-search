@@ -98,7 +98,7 @@ def create_tables():
             """
         )
 
-        # Migration for databases created before the embedding column existed
+        # Migration for databases created before embedding existed
         columns = connection.execute(
             "PRAGMA table_info(sub_questions)"
         ).fetchall()
@@ -234,6 +234,35 @@ async def upload_paper(
             detail="Only PDF files are allowed"
         )
 
+    normalized_module = module.strip().upper()
+    normalized_exam = exam.strip()
+    normalized_filename = file.filename.strip()
+
+    # Duplicate-upload protection
+    with get_database() as connection:
+        existing_paper = connection.execute(
+            """
+            SELECT id
+            FROM papers
+            WHERE module = ?
+              AND year = ?
+              AND exam = ?
+              AND original_filename = ?
+            """,
+            (
+                normalized_module,
+                year,
+                normalized_exam,
+                normalized_filename
+            )
+        ).fetchone()
+
+    if existing_paper:
+        raise HTTPException(
+            status_code=409,
+            detail="This paper has already been uploaded"
+        )
+
     paper_id = str(uuid.uuid4())
     stored_filename = f"{paper_id}.pdf"
     destination = STORAGE_DIR / stored_filename
@@ -269,10 +298,10 @@ async def upload_paper(
             """,
             (
                 paper_id,
-                module,
+                normalized_module,
                 year,
-                exam,
-                file.filename,
+                normalized_exam,
+                normalized_filename,
                 stored_filename
             )
         )
@@ -338,10 +367,10 @@ async def upload_paper(
     return {
         "message": "Paper uploaded and parsed successfully",
         "id": paper_id,
-        "module": module,
+        "module": normalized_module,
         "year": year,
-        "exam": exam,
-        "filename": file.filename,
+        "exam": normalized_exam,
+        "filename": normalized_filename,
         "main_questions_found": len(parsed_questions),
         "sub_questions_found": total_sub_questions
     }
@@ -413,9 +442,6 @@ def delete_paper(paper_id: str):
     }
 
 
-
-
-
 @app.post("/backfill-embeddings")
 def backfill_embeddings():
     with get_database() as connection:
@@ -455,12 +481,6 @@ def backfill_embeddings():
         "message": "Embedding backfill complete",
         "updated": updated
     }
-
-
-
-
-
-
 
 
 @app.post("/search")
@@ -503,7 +523,6 @@ def search_questions(request: SearchRequest):
                 row["embedding"]
             )
         else:
-            # Backward compatibility for old rows
             question_embedding = embed_text(
                 row["text"]
             )
