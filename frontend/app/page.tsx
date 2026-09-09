@@ -566,7 +566,10 @@ export default function Home() {
                     null,
 
                   limit:
-                    5,
+                    10,
+
+                  min_score:
+                    0.35,
                 }
               ),
           }
@@ -596,7 +599,7 @@ export default function Home() {
       ) {
 
         setSearchMessage(
-          "No similar questions found for these filters."
+          "No sufficiently similar questions found for these filters."
         );
       }
 

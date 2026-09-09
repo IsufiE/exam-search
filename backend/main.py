@@ -101,10 +101,6 @@ def create_tables():
             """
         )
 
-        # -------------------------
-        # Database migrations
-        # -------------------------
-
         columns = connection.execute(
             "PRAGMA table_info(sub_questions)"
         ).fetchall()
@@ -144,22 +140,12 @@ def find_question_page(
     full_text: str,
     question_text: str
 ) -> int | None:
-    """
-    Find which extracted PDF page contains a question.
 
-    pdf_parser.py inserts markers such as:
-
-        --- PAGE 3 ---
-
-    We find the question inside the full extracted text,
-    then find the nearest preceding page marker.
-    """
-
-    question_position = full_text.find(question_text)
+    question_position = full_text.find(
+        question_text
+    )
 
     if question_position == -1:
-        # Try using the beginning of the question
-        # in case whitespace caused a mismatch.
         question_prefix = question_text[:100]
 
         question_position = full_text.find(
@@ -197,7 +183,8 @@ class SearchRequest(BaseModel):
     module: str
     year: int | None = None
     exam: str | None = None
-    limit: int = 5
+    limit: int = 10
+    min_score: float = 0.35
 
 
 # -------------------------
@@ -373,10 +360,7 @@ async def upload_paper(
         file.filename.strip()
     )
 
-    # -------------------------
-    # Duplicate protection
-    # -------------------------
-
+    # Duplicate-upload protection
     with get_database() as connection:
 
         existing_paper = connection.execute(
@@ -402,10 +386,7 @@ async def upload_paper(
             detail="This paper has already been uploaded"
         )
 
-    # -------------------------
     # Save PDF
-    # -------------------------
-
     paper_id = str(
         uuid.uuid4()
     )
@@ -425,10 +406,7 @@ async def upload_paper(
             buffer
         )
 
-    # -------------------------
     # Parse PDF
-    # -------------------------
-
     try:
         full_text = extract_text_from_pdf(
             destination
@@ -449,10 +427,7 @@ async def upload_paper(
             detail=f"Could not parse PDF: {error}"
         )
 
-    # -------------------------
-    # Store paper + questions
-    # -------------------------
-
+    # Store paper and questions
     with get_database() as connection:
 
         connection.execute(
@@ -511,7 +486,6 @@ async def upload_paper(
                     sub_question["text"]
                 )
 
-                # Embedding
                 embedding = embed_text(
                     question_text
                 )
@@ -522,7 +496,6 @@ async def upload_paper(
                     )
                 )
 
-                # Page number
                 page_number = (
                     find_question_page(
                         full_text,
@@ -719,7 +692,7 @@ def backfill_embeddings():
 
 
 # -------------------------
-# Page Number Backfill
+# Page Backfill
 # -------------------------
 
 @app.post("/backfill-pages")
@@ -913,36 +886,39 @@ def search_questions(
             question_embedding
         )
 
-        results.append(
-            {
-                "id":
-                    row["id"],
+        # Only keep genuinely relevant matches
+        if score >= request.min_score:
 
-                "paper_id":
-                    row["paper_id"],
+            results.append(
+                {
+                    "id":
+                        row["id"],
 
-                "module":
-                    row["module"],
+                    "paper_id":
+                        row["paper_id"],
 
-                "year":
-                    row["year"],
+                    "module":
+                        row["module"],
 
-                "exam":
-                    row["exam"],
+                    "year":
+                        row["year"],
 
-                "question_number":
-                    f"{row['question_number']}({row['label']})",
+                    "exam":
+                        row["exam"],
 
-                "page_number":
-                    row["page_number"],
+                    "question_number":
+                        f"{row['question_number']}({row['label']})",
 
-                "text":
-                    row["text"],
+                    "page_number":
+                        row["page_number"],
 
-                "score":
-                    score,
-            }
-        )
+                    "text":
+                        row["text"],
+
+                    "score":
+                        score,
+                }
+            )
 
     results.sort(
         key=lambda item:
