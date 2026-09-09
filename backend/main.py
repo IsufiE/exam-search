@@ -1,10 +1,12 @@
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 import uuid
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from pdf_parser import extract_text_from_pdf
@@ -92,13 +94,17 @@ def create_tables():
                 label TEXT NOT NULL,
                 text TEXT NOT NULL,
                 embedding TEXT,
+                page_number INTEGER,
                 FOREIGN KEY (main_question_id)
                     REFERENCES main_questions(id)
             )
             """
         )
 
-        # Migration for databases created before embedding existed
+        # -------------------------
+        # Database migrations
+        # -------------------------
+
         columns = connection.execute(
             "PRAGMA table_info(sub_questions)"
         ).fetchall()
@@ -116,10 +122,70 @@ def create_tables():
                 """
             )
 
+        if "page_number" not in column_names:
+            connection.execute(
+                """
+                ALTER TABLE sub_questions
+                ADD COLUMN page_number INTEGER
+                """
+            )
+
         connection.commit()
 
 
 create_tables()
+
+
+# -------------------------
+# Helpers
+# -------------------------
+
+def find_question_page(
+    full_text: str,
+    question_text: str
+) -> int | None:
+    """
+    Find which extracted PDF page contains a question.
+
+    pdf_parser.py inserts markers such as:
+
+        --- PAGE 3 ---
+
+    We find the question inside the full extracted text,
+    then find the nearest preceding page marker.
+    """
+
+    question_position = full_text.find(question_text)
+
+    if question_position == -1:
+        # Try using the beginning of the question
+        # in case whitespace caused a mismatch.
+        question_prefix = question_text[:100]
+
+        question_position = full_text.find(
+            question_prefix
+        )
+
+    if question_position == -1:
+        return None
+
+    text_before_question = full_text[
+        :question_position
+    ]
+
+    page_matches = list(
+        re.finditer(
+            r"--- PAGE (\d+) ---",
+            text_before_question
+        )
+    )
+
+    if not page_matches:
+        return 1
+
+    return int(
+        page_matches[-1].group(1)
+    )
 
 
 # -------------------------
@@ -135,7 +201,7 @@ class SearchRequest(BaseModel):
 
 
 # -------------------------
-# Routes
+# Basic Routes
 # -------------------------
 
 @app.get("/")
@@ -151,6 +217,10 @@ def health():
         "status": "ok"
     }
 
+
+# -------------------------
+# Papers
+# -------------------------
 
 @app.get("/papers")
 def get_papers():
@@ -169,8 +239,55 @@ def get_papers():
             """
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    return [
+        dict(row)
+        for row in rows
+    ]
 
+
+@app.get("/papers/{paper_id}/file")
+def get_paper_file(paper_id: str):
+    with get_database() as connection:
+
+        paper = connection.execute(
+            """
+            SELECT
+                original_filename,
+                stored_filename
+            FROM papers
+            WHERE id = ?
+            """,
+            (paper_id,)
+        ).fetchone()
+
+    if paper is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Paper not found"
+        )
+
+    pdf_path = (
+        STORAGE_DIR /
+        paper["stored_filename"]
+    )
+
+    if not pdf_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="PDF file not found"
+        )
+
+    return FileResponse(
+        path=pdf_path,
+        media_type="application/pdf",
+        filename=paper["original_filename"],
+        content_disposition_type="inline",
+    )
+
+
+# -------------------------
+# Paper Questions
+# -------------------------
 
 @app.get("/papers/{paper_id}/questions")
 def get_paper_questions(paper_id: str):
@@ -197,7 +314,8 @@ def get_paper_questions(paper_id: str):
                 SELECT
                     id,
                     label,
-                    text
+                    text,
+                    page_number
                 FROM sub_questions
                 WHERE main_question_id = ?
                 ORDER BY label
@@ -207,7 +325,9 @@ def get_paper_questions(paper_id: str):
 
             result.append(
                 {
-                    "question_number": main_row["question_number"],
+                    "question_number":
+                        main_row["question_number"],
+
                     "sub_questions": [
                         dict(row)
                         for row in sub_rows
@@ -217,6 +337,10 @@ def get_paper_questions(paper_id: str):
 
     return result
 
+
+# -------------------------
+# Upload Paper
+# -------------------------
 
 @app.post("/papers")
 async def upload_paper(
@@ -237,12 +361,24 @@ async def upload_paper(
             detail="Only PDF files are allowed"
         )
 
-    normalized_module = module.strip().upper()
-    normalized_exam = exam.strip()
-    normalized_filename = file.filename.strip()
+    normalized_module = (
+        module.strip().upper()
+    )
 
-    # Duplicate-upload protection
+    normalized_exam = (
+        exam.strip()
+    )
+
+    normalized_filename = (
+        file.filename.strip()
+    )
+
+    # -------------------------
+    # Duplicate protection
+    # -------------------------
+
     with get_database() as connection:
+
         existing_paper = connection.execute(
             """
             SELECT id
@@ -266,24 +402,56 @@ async def upload_paper(
             detail="This paper has already been uploaded"
         )
 
-    paper_id = str(uuid.uuid4())
-    stored_filename = f"{paper_id}.pdf"
-    destination = STORAGE_DIR / stored_filename
+    # -------------------------
+    # Save PDF
+    # -------------------------
+
+    paper_id = str(
+        uuid.uuid4()
+    )
+
+    stored_filename = (
+        f"{paper_id}.pdf"
+    )
+
+    destination = (
+        STORAGE_DIR /
+        stored_filename
+    )
 
     with destination.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        shutil.copyfileobj(
+            file.file,
+            buffer
+        )
+
+    # -------------------------
+    # Parse PDF
+    # -------------------------
 
     try:
-        text = extract_text_from_pdf(destination)
-        parsed_questions = split_into_questions(text)
+        full_text = extract_text_from_pdf(
+            destination
+        )
+
+        parsed_questions = split_into_questions(
+            full_text
+        )
 
     except Exception as error:
-        destination.unlink(missing_ok=True)
+
+        destination.unlink(
+            missing_ok=True
+        )
 
         raise HTTPException(
             status_code=500,
             detail=f"Could not parse PDF: {error}"
         )
+
+    # -------------------------
+    # Store paper + questions
+    # -------------------------
 
     with get_database() as connection:
 
@@ -313,7 +481,9 @@ async def upload_paper(
 
         for question in parsed_questions:
 
-            main_question_id = str(uuid.uuid4())
+            main_question_id = str(
+                uuid.uuid4()
+            )
 
             connection.execute(
                 """
@@ -333,14 +503,31 @@ async def upload_paper(
 
             for sub_question in question["sub_questions"]:
 
-                sub_question_id = str(uuid.uuid4())
+                sub_question_id = str(
+                    uuid.uuid4()
+                )
 
-                embedding = embed_text(
+                question_text = (
                     sub_question["text"]
                 )
 
-                embedding_json = embedding_to_json(
-                    embedding
+                # Embedding
+                embedding = embed_text(
+                    question_text
+                )
+
+                embedding_json = (
+                    embedding_to_json(
+                        embedding
+                    )
+                )
+
+                # Page number
+                page_number = (
+                    find_question_page(
+                        full_text,
+                        question_text
+                    )
                 )
 
                 connection.execute(
@@ -350,16 +537,18 @@ async def upload_paper(
                         main_question_id,
                         label,
                         text,
-                        embedding
+                        embedding,
+                        page_number
                     )
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sub_question_id,
                         main_question_id,
                         sub_question["label"],
-                        sub_question["text"],
-                        embedding_json
+                        question_text,
+                        embedding_json,
+                        page_number
                     )
                 )
 
@@ -368,16 +557,35 @@ async def upload_paper(
         connection.commit()
 
     return {
-        "message": "Paper uploaded and parsed successfully",
-        "id": paper_id,
-        "module": normalized_module,
-        "year": year,
-        "exam": normalized_exam,
-        "filename": normalized_filename,
-        "main_questions_found": len(parsed_questions),
-        "sub_questions_found": total_sub_questions
+        "message":
+            "Paper uploaded and parsed successfully",
+
+        "id":
+            paper_id,
+
+        "module":
+            normalized_module,
+
+        "year":
+            year,
+
+        "exam":
+            normalized_exam,
+
+        "filename":
+            normalized_filename,
+
+        "main_questions_found":
+            len(parsed_questions),
+
+        "sub_questions_found":
+            total_sub_questions
     }
 
+
+# -------------------------
+# Delete Paper
+# -------------------------
 
 @app.delete("/papers/{paper_id}")
 def delete_paper(paper_id: str):
@@ -408,12 +616,15 @@ def delete_paper(paper_id: str):
         ).fetchall()
 
         for main_question in main_questions:
+
             connection.execute(
                 """
                 DELETE FROM sub_questions
                 WHERE main_question_id = ?
                 """,
-                (main_question["id"],)
+                (
+                    main_question["id"],
+                )
             )
 
         connection.execute(
@@ -434,16 +645,26 @@ def delete_paper(paper_id: str):
 
         connection.commit()
 
-    pdf_path = STORAGE_DIR / paper["stored_filename"]
+    pdf_path = (
+        STORAGE_DIR /
+        paper["stored_filename"]
+    )
 
     if pdf_path.exists():
         pdf_path.unlink()
 
     return {
-        "message": "Paper deleted successfully",
-        "id": paper_id
+        "message":
+            "Paper deleted successfully",
+
+        "id":
+            paper_id
     }
 
+
+# -------------------------
+# Embedding Backfill
+# -------------------------
 
 @app.post("/backfill-embeddings")
 def backfill_embeddings():
@@ -461,8 +682,16 @@ def backfill_embeddings():
         updated = 0
 
         for row in rows:
-            embedding = embed_text(row["text"])
-            embedding_json = embedding_to_json(embedding)
+
+            embedding = embed_text(
+                row["text"]
+            )
+
+            embedding_json = (
+                embedding_to_json(
+                    embedding
+                )
+            )
 
             connection.execute(
                 """
@@ -481,13 +710,105 @@ def backfill_embeddings():
         connection.commit()
 
     return {
-        "message": "Embedding backfill complete",
-        "updated": updated
+        "message":
+            "Embedding backfill complete",
+
+        "updated":
+            updated
     }
 
 
+# -------------------------
+# Page Number Backfill
+# -------------------------
+
+@app.post("/backfill-pages")
+def backfill_pages():
+    with get_database() as connection:
+
+        papers = connection.execute(
+            """
+            SELECT
+                id,
+                stored_filename
+            FROM papers
+            """
+        ).fetchall()
+
+        updated = 0
+
+        for paper in papers:
+
+            pdf_path = (
+                STORAGE_DIR /
+                paper["stored_filename"]
+            )
+
+            if not pdf_path.exists():
+                continue
+
+            full_text = extract_text_from_pdf(
+                pdf_path
+            )
+
+            rows = connection.execute(
+                """
+                SELECT
+                    sq.id,
+                    sq.text
+                FROM sub_questions sq
+                JOIN main_questions mq
+                    ON sq.main_question_id = mq.id
+                WHERE mq.paper_id = ?
+                  AND sq.page_number IS NULL
+                """,
+                (
+                    paper["id"],
+                )
+            ).fetchall()
+
+            for row in rows:
+
+                page_number = (
+                    find_question_page(
+                        full_text,
+                        row["text"]
+                    )
+                )
+
+                connection.execute(
+                    """
+                    UPDATE sub_questions
+                    SET page_number = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        page_number,
+                        row["id"]
+                    )
+                )
+
+                updated += 1
+
+        connection.commit()
+
+    return {
+        "message":
+            "Page-number backfill complete",
+
+        "updated":
+            updated
+    }
+
+
+# -------------------------
+# Semantic Search
+# -------------------------
+
 @app.post("/search")
-def search_questions(request: SearchRequest):
+def search_questions(
+    request: SearchRequest
+):
     if not request.query.strip():
         raise HTTPException(
             status_code=400,
@@ -500,7 +821,11 @@ def search_questions(request: SearchRequest):
             detail="Module is required"
         )
 
-    normalized_module = request.module.strip().upper()
+    normalized_module = (
+        request.module
+        .strip()
+        .upper()
+    )
 
     normalized_exam = (
         request.exam.strip()
@@ -508,7 +833,9 @@ def search_questions(request: SearchRequest):
         else None
     )
 
-    query_embedding = embed_text(request.query)
+    query_embedding = embed_text(
+        request.query
+    )
 
     sql_query = """
         SELECT
@@ -516,7 +843,9 @@ def search_questions(request: SearchRequest):
             sq.label,
             sq.text,
             sq.embedding,
+            sq.page_number,
             mq.question_number,
+            p.id AS paper_id,
             p.module,
             p.year,
             p.exam
@@ -528,17 +857,32 @@ def search_questions(request: SearchRequest):
         WHERE p.module = ?
     """
 
-    params = [normalized_module]
+    params = [
+        normalized_module
+    ]
 
     if request.year is not None:
-        sql_query += " AND p.year = ?"
-        params.append(request.year)
+
+        sql_query += (
+            " AND p.year = ?"
+        )
+
+        params.append(
+            request.year
+        )
 
     if normalized_exam:
-        sql_query += " AND p.exam = ?"
-        params.append(normalized_exam)
+
+        sql_query += (
+            " AND p.exam = ?"
+        )
+
+        params.append(
+            normalized_exam
+        )
 
     with get_database() as connection:
+
         rows = connection.execute(
             sql_query,
             params
@@ -549,12 +893,19 @@ def search_questions(request: SearchRequest):
     for row in rows:
 
         if row["embedding"]:
-            question_embedding = embedding_from_json(
-                row["embedding"]
+
+            question_embedding = (
+                embedding_from_json(
+                    row["embedding"]
+                )
             )
+
         else:
-            question_embedding = embed_text(
-                row["text"]
+
+            question_embedding = (
+                embed_text(
+                    row["text"]
+                )
             )
 
         score = cosine_similarity(
@@ -564,20 +915,41 @@ def search_questions(request: SearchRequest):
 
         results.append(
             {
-                "id": row["id"],
-                "module": row["module"],
-                "year": row["year"],
-                "exam": row["exam"],
+                "id":
+                    row["id"],
+
+                "paper_id":
+                    row["paper_id"],
+
+                "module":
+                    row["module"],
+
+                "year":
+                    row["year"],
+
+                "exam":
+                    row["exam"],
+
                 "question_number":
                     f"{row['question_number']}({row['label']})",
-                "text": row["text"],
-                "score": score,
+
+                "page_number":
+                    row["page_number"],
+
+                "text":
+                    row["text"],
+
+                "score":
+                    score,
             }
         )
 
     results.sort(
-        key=lambda item: item["score"],
+        key=lambda item:
+            item["score"],
         reverse=True
     )
 
-    return results[:request.limit]
+    return results[
+        :request.limit
+    ]
