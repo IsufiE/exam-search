@@ -214,56 +214,157 @@ def calculate_centroid(
 def clean_question_text(
     text: str,
 ) -> str:
+    """
+    Remove PDF/page presentation noise while preserving
+    actual exam-question content.
 
-    text = re.sub(
-        r"--- PAGE \d+ ---",
-        " ",
-        text,
-        flags=re.IGNORECASE,
+    Importantly, mark information such as:
+
+        [5 marks]
+        [25 marks]
+
+    is deliberately kept.
+
+    The raw text stored in SQLite is not modified. This
+    cleaner is only used for labels and API presentation.
+    """
+
+    if not text:
+        return ""
+
+    cleaned = text.replace(
+        "\r\n",
+        "\n"
+    ).replace(
+        "\r",
+        "\n"
     )
 
-    text = re.sub(
-        r"\[\s*\d+\s+marks?\s*\]",
-        " ",
-        text,
-        flags=re.IGNORECASE,
+    # -----------------------------------------------------
+    # Internal page markers inserted by the PDF parser
+    # -----------------------------------------------------
+
+    cleaned = re.sub(
+        r"(?im)^\s*---\s*PAGE\s+\d+\s*---\s*$",
+        "",
+        cleaned,
     )
 
-    text = re.sub(
-        r"\bpage\s+\d+\s*/\s*\d+\b",
-        " ",
-        text,
-        flags=re.IGNORECASE,
+    # -----------------------------------------------------
+    # University footer/header lines
+    #
+    # This also removes common extraction corruption before
+    # the copyright symbol, e.g. ¬©Maynooth University.
+    # -----------------------------------------------------
+
+    cleaned = re.sub(
+        r"(?im)^.*maynooth\s+university.*$",
+        "",
+        cleaned,
     )
 
-    text = re.sub(
-        r"\bcs\d+\b",
-        " ",
-        text,
-        flags=re.IGNORECASE,
+    # -----------------------------------------------------
+    # Page-number footer lines:
+    #
+    # Page 4/14
+    # Page 4 / 14
+    # -----------------------------------------------------
+
+    cleaned = re.sub(
+        r"(?im)^\s*page\s+\d+\s*/\s*\d+\s*$",
+        "",
+        cleaned,
     )
 
-    text = re.sub(
-        r"\bmaynooth university\b",
-        " ",
-        text,
-        flags=re.IGNORECASE,
+    # -----------------------------------------------------
+    # Standalone module-code footer/header lines.
+    #
+    # Examples:
+    #
+    # CS410
+    # CS404
+    # MA123
+    #
+    # Only a standalone line is removed. A module code
+    # occurring inside genuine question text is preserved.
+    # -----------------------------------------------------
+
+    cleaned = re.sub(
+        r"(?im)^\s*[A-Za-z]{2,}\d{2,}\s*$",
+        "",
+        cleaned,
     )
 
-    text = re.sub(
-        r"\b(january|may|august|september)\s+\d{4}\b",
-        " ",
-        text,
-        flags=re.IGNORECASE,
+    # -----------------------------------------------------
+    # Standalone exam-session/date footer lines.
+    #
+    # Examples:
+    #
+    # January 2026
+    # May 2025
+    # August 2024
+    #
+    # This intentionally acts only on a complete line.
+    # -----------------------------------------------------
+
+    cleaned = re.sub(
+        (
+            r"(?im)^\s*"
+            r"(january|february|march|april|may|june|"
+            r"july|august|september|october|november|december)"
+            r"\s+\d{4}\s*$"
+        ),
+        "",
+        cleaned,
     )
 
-    text = re.sub(
-        r"\s+",
-        " ",
-        text,
+    # -----------------------------------------------------
+    # Remove lines containing only copyright debris.
+    # -----------------------------------------------------
+
+    cleaned = re.sub(
+        r"(?im)^\s*[¬©®]+\s*$",
+        "",
+        cleaned,
     )
 
-    return text.strip()
+    # -----------------------------------------------------
+    # Remove trailing spaces on each line
+    # -----------------------------------------------------
+
+    cleaned = re.sub(
+        r"[ \t]+$",
+        "",
+        cleaned,
+        flags=re.MULTILINE,
+    )
+
+    # -----------------------------------------------------
+    # Convert excessive spaces/tabs within a line to one
+    # space, but keep useful line breaks.
+    # -----------------------------------------------------
+
+    cleaned = re.sub(
+        r"[ \t]{2,}",
+        " ",
+        cleaned,
+    )
+
+    # -----------------------------------------------------
+    # No more than one blank line between text blocks
+    # -----------------------------------------------------
+
+    cleaned = re.sub(
+        r"\n\s*\n\s*\n+",
+        "\n\n",
+        cleaned,
+    )
+
+    # -----------------------------------------------------
+    # Remove blank space at the beginning/end
+    # -----------------------------------------------------
+
+    return cleaned.strip()
 
 
 # =========================================================
@@ -536,8 +637,6 @@ def generate_topic_label(
             phrase.split()
         )
 
-        # Avoid repeatedly selecting nearly identical
-        # phrases.
         overlap = (
             phrase_words
             &
@@ -944,7 +1043,6 @@ def analyse_topics(
             }
         )
 
-    # Stronger recurring trends first.
     topics.sort(
         key=lambda topic: (
             topic[
@@ -960,7 +1058,6 @@ def analyse_topics(
         reverse=True,
     )
 
-    # Assign stable IDs after sorting.
     for index, topic in enumerate(
         topics,
         start=1,

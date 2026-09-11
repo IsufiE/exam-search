@@ -20,6 +20,7 @@ from search_engine import (
 )
 from trend_engine import (
     analyse_topics,
+    clean_question_text,
 )
 
 
@@ -64,7 +65,6 @@ STORAGE_DIR.mkdir(exist_ok=True)
 def get_database():
     connection = sqlite3.connect(DATABASE_PATH)
     connection.row_factory = sqlite3.Row
-
     return connection
 
 
@@ -112,10 +112,6 @@ def create_tables():
             )
             """
         )
-
-        # -------------------------------------------------
-        # Migrations for older databases
-        # -------------------------------------------------
 
         columns = connection.execute(
             "PRAGMA table_info(sub_questions)"
@@ -207,22 +203,6 @@ STOP_WORDS = {
 
 
 def tokenize_search_text(text: str) -> set[str]:
-    """
-    Extract useful search terms.
-
-    This is generic and works across modules.
-
-    Examples it can preserve:
-
-        word2vec
-        tcp/ip
-        mpi
-        cnn
-        q-learning
-        pageRank
-        svm
-        openmp
-    """
 
     tokens = re.findall(
         r"[A-Za-z0-9][A-Za-z0-9+\-*/.]*",
@@ -243,12 +223,6 @@ def keyword_similarity(
     query: str,
     question: str
 ) -> float:
-    """
-    Calculate how many meaningful query terms
-    also appear in the exam question.
-
-    Returns 0.0 - 1.0.
-    """
 
     query_tokens = tokenize_search_text(
         query
@@ -276,12 +250,6 @@ def hybrid_score(
     semantic_score: float,
     keyword_score: float
 ) -> float:
-    """
-    Semantic meaning remains the most important signal.
-
-    80% semantic similarity
-    20% keyword overlap
-    """
 
     return (
         semantic_score * 0.80
@@ -349,14 +317,6 @@ def format_question_number(
 def format_repeated_question(
     question: dict
 ) -> dict:
-    """
-    Remove the embedding before returning a repeated-question
-    match to the frontend.
-
-    Embeddings are needed internally for comparison, but there
-    is no reason to send hundreds of floating-point values over
-    the API.
-    """
 
     return {
         "id":
@@ -381,7 +341,9 @@ def format_repeated_question(
             question["page_number"],
 
         "text":
-            question["text"],
+            clean_question_text(
+                question["text"]
+            ),
     }
 
 
@@ -397,9 +359,6 @@ class SearchRequest(BaseModel):
     exam: str | None = None
 
     limit: int = 10
-
-    # Threshold applies to semantic similarity,
-    # not the hybrid score.
     min_score: float = 0.35
 
 
@@ -572,7 +531,13 @@ def get_paper_questions(
                         ],
 
                     "sub_questions": [
-                        dict(row)
+                        {
+                            **dict(row),
+                            "text":
+                                clean_question_text(
+                                    row["text"]
+                                ),
+                        }
                         for row in sub_rows
                     ],
                 }
@@ -592,10 +557,6 @@ async def upload_paper(
     exam: str = Form(...),
     file: UploadFile = File(...)
 ):
-
-    # -----------------------------------------------------
-    # Validate
-    # -----------------------------------------------------
 
     if not file.filename:
 
@@ -627,10 +588,6 @@ async def upload_paper(
         file.filename.strip()
     )
 
-    # -----------------------------------------------------
-    # Duplicate protection
-    # -----------------------------------------------------
-
     with get_database() as connection:
 
         existing_paper = connection.execute(
@@ -660,10 +617,6 @@ async def upload_paper(
                 "This paper has already been uploaded"
         )
 
-    # -----------------------------------------------------
-    # Save PDF
-    # -----------------------------------------------------
-
     paper_id = str(
         uuid.uuid4()
     )
@@ -686,10 +639,6 @@ async def upload_paper(
             file.file,
             buffer
         )
-
-    # -----------------------------------------------------
-    # Extract + parse
-    # -----------------------------------------------------
 
     try:
 
@@ -729,10 +678,6 @@ async def upload_paper(
             detail=
                 f"Could not parse PDF: {error}"
         )
-
-    # -----------------------------------------------------
-    # Store everything
-    # -----------------------------------------------------
 
     with get_database() as connection:
 
@@ -807,10 +752,6 @@ async def upload_paper(
                     )
                 )
 
-                # -----------------------------------------
-                # Embedding
-                # -----------------------------------------
-
                 embedding = embed_text(
                     question_text
                 )
@@ -821,20 +762,12 @@ async def upload_paper(
                     )
                 )
 
-                # -----------------------------------------
-                # Page
-                # -----------------------------------------
-
                 page_number = (
                     find_question_page(
                         full_text,
                         question_text
                     )
                 )
-
-                # -----------------------------------------
-                # Store question
-                # -----------------------------------------
 
                 connection.execute(
                     """
@@ -1151,10 +1084,6 @@ def search_questions(
     request: SearchRequest
 ):
 
-    # -----------------------------------------------------
-    # Validate
-    # -----------------------------------------------------
-
     if not request.query.strip():
 
         raise HTTPException(
@@ -1190,17 +1119,9 @@ def search_questions(
         else None
     )
 
-    # -----------------------------------------------------
-    # Query embedding
-    # -----------------------------------------------------
-
     query_embedding = embed_text(
         request.query
     )
-
-    # -----------------------------------------------------
-    # Fetch only the selected module
-    # -----------------------------------------------------
 
     sql_query = """
         SELECT
@@ -1234,10 +1155,6 @@ def search_questions(
         normalized_module
     ]
 
-    # -----------------------------------------------------
-    # Optional year
-    # -----------------------------------------------------
-
     if request.year is not None:
 
         sql_query += (
@@ -1247,10 +1164,6 @@ def search_questions(
         params.append(
             request.year
         )
-
-    # -----------------------------------------------------
-    # Optional exam session
-    # -----------------------------------------------------
 
     if normalized_exam:
 
@@ -1269,17 +1182,9 @@ def search_questions(
             params
         ).fetchall()
 
-    # -----------------------------------------------------
-    # Rank results
-    # -----------------------------------------------------
-
     results = []
 
     for row in rows:
-
-        # ---------------------------------------------
-        # Stored embedding
-        # ---------------------------------------------
 
         if row["embedding"]:
 
@@ -1291,16 +1196,11 @@ def search_questions(
 
         else:
 
-            # Backward compatibility
             question_embedding = (
                 embed_text(
                     row["text"]
                 )
             )
-
-        # ---------------------------------------------
-        # Semantic similarity
-        # ---------------------------------------------
 
         semantic_score = (
             cosine_similarity(
@@ -1309,10 +1209,6 @@ def search_questions(
             )
         )
 
-        # ---------------------------------------------
-        # Ignore semantically weak questions
-        # ---------------------------------------------
-
         if (
             semantic_score
             <
@@ -1320,20 +1216,12 @@ def search_questions(
         ):
             continue
 
-        # ---------------------------------------------
-        # Keyword relevance
-        # ---------------------------------------------
-
         keyword_score = (
             keyword_similarity(
                 request.query,
                 row["text"]
             )
         )
-
-        # ---------------------------------------------
-        # Final hybrid score
-        # ---------------------------------------------
 
         score = hybrid_score(
             semantic_score,
@@ -1373,14 +1261,13 @@ def search_questions(
                     row["page_number"],
 
                 "text":
-                    row["text"],
+                    clean_question_text(
+                        row["text"]
+                    ),
 
-                # This is what the frontend
-                # currently displays.
                 "score":
                     score,
 
-                # Useful while evaluating search.
                 "semantic_score":
                     semantic_score,
 
@@ -1388,10 +1275,6 @@ def search_questions(
                     keyword_score,
             }
         )
-
-    # -----------------------------------------------------
-    # Highest hybrid score first
-    # -----------------------------------------------------
 
     results.sort(
         key=lambda item:
@@ -1412,25 +1295,8 @@ def search_questions(
 def get_module_trends(
     module: str,
     minimum_years: int = 2,
-    similarity_threshold: float = 0.72,
+    similarity_threshold: float = 0.62,
 ):
-
-    """
-    Analyse recurring topics across past exam papers
-    for one module.
-
-    Example:
-
-        GET /trends/CS410
-
-    Optional:
-
-        GET /trends/CS410?minimum_years=3
-
-    This uses the same semantic embeddings already stored
-    for search. No new embeddings or database tables are
-    required.
-    """
 
     normalized_module = (
         module
@@ -1464,10 +1330,6 @@ def get_module_trends(
             detail=
                 "similarity_threshold must be between 0 and 1",
         )
-
-    # -----------------------------------------------------
-    # Load questions from only the requested module
-    # -----------------------------------------------------
 
     with get_database() as connection:
 
@@ -1520,10 +1382,6 @@ def get_module_trends(
                 f"No exam questions found for {normalized_module}",
         )
 
-    # -----------------------------------------------------
-    # Restore embeddings
-    # -----------------------------------------------------
-
     questions = []
 
     for row in rows:
@@ -1540,8 +1398,6 @@ def get_module_trends(
 
         else:
 
-            # Compatibility with any old question that
-            # does not yet have a stored embedding.
             embedding = (
                 embed_text(
                     row[
@@ -1604,10 +1460,6 @@ def get_module_trends(
             }
         )
 
-    # -----------------------------------------------------
-    # Analyse
-    # -----------------------------------------------------
-
     topics = analyse_topics(
         questions,
         minimum_years=
@@ -1667,50 +1519,16 @@ def get_module_trends(
 @app.get("/repeated-questions/{module}")
 def get_repeated_questions(
     module: str,
-    similarity_threshold: float = 0.78,
+    similarity_threshold: float = 0.72,
     limit: int = 20,
     different_years_only: bool = True,
 ):
-
-    """
-    Find strongly similar exam-question pairs inside one module.
-
-    This is intentionally stricter than topic clustering.
-
-    Topic clustering asks:
-
-        "Are these questions about the same topic?"
-
-    Repeated-question detection asks:
-
-        "Are these questions close enough that they may be
-        repeated or reworded versions of one another?"
-
-    By default, only questions from different years are
-    compared.
-
-    Example:
-
-        GET /repeated-questions/CS410
-
-    Optional:
-
-        GET /repeated-questions/CS410?similarity_threshold=0.82
-
-        GET /repeated-questions/CS410?limit=10
-
-        GET /repeated-questions/CS410?different_years_only=false
-    """
 
     normalized_module = (
         module
         .strip()
         .upper()
     )
-
-    # -----------------------------------------------------
-    # Validate
-    # -----------------------------------------------------
 
     if not normalized_module:
 
@@ -1746,10 +1564,6 @@ def get_repeated_questions(
             detail=
                 "limit cannot be greater than 100",
         )
-
-    # -----------------------------------------------------
-    # Load questions for only this module
-    # -----------------------------------------------------
 
     with get_database() as connection:
 
@@ -1803,10 +1617,6 @@ def get_repeated_questions(
                 f"No exam questions found for {normalized_module}",
         )
 
-    # -----------------------------------------------------
-    # Restore embeddings
-    # -----------------------------------------------------
-
     questions = []
 
     for row in rows:
@@ -1821,7 +1631,6 @@ def get_repeated_questions(
 
         else:
 
-            # Backward compatibility for any old rows.
             embedding = (
                 embed_text(
                     row["text"]
@@ -1866,17 +1675,6 @@ def get_repeated_questions(
             }
         )
 
-    # -----------------------------------------------------
-    # Compare each unique pair exactly once
-    #
-    # question_index + 1 prevents:
-    #
-    #   A -> B
-    #   B -> A
-    #
-    # from both being returned.
-    # -----------------------------------------------------
-
     matches = []
 
     comparison_count = 0
@@ -1898,11 +1696,6 @@ def get_repeated_questions(
                 second_index
             ]
 
-            # ---------------------------------------------
-            # By default we care about recurrence across
-            # separate exam years.
-            # ---------------------------------------------
-
             if (
                 different_years_only
                 and
@@ -1913,10 +1706,6 @@ def get_repeated_questions(
                 continue
 
             comparison_count += 1
-
-            # ---------------------------------------------
-            # Semantic similarity
-            # ---------------------------------------------
 
             similarity = (
                 cosine_similarity(
@@ -1929,24 +1718,12 @@ def get_repeated_questions(
                 )
             )
 
-            # ---------------------------------------------
-            # Ignore weaker topic-level similarity
-            # ---------------------------------------------
-
             if (
                 similarity
                 <
                 similarity_threshold
             ):
                 continue
-
-            # ---------------------------------------------
-            # Return the newer question first where
-            # possible. This makes frontend presentation
-            # easier to understand:
-            #
-            # newer question -> similar older question
-            # ---------------------------------------------
 
             newer_question = (
                 first_question
@@ -1994,10 +1771,6 @@ def get_repeated_questions(
                 }
             )
 
-    # -----------------------------------------------------
-    # Strongest possible repeats first
-    # -----------------------------------------------------
-
     matches.sort(
         key=lambda item:
             item["similarity"],
@@ -2007,10 +1780,6 @@ def get_repeated_questions(
     matches = matches[
         :limit
     ]
-
-    # -----------------------------------------------------
-    # Years represented in this module
-    # -----------------------------------------------------
 
     years = sorted(
         {
