@@ -53,6 +53,35 @@ type TrendResponse = {
   topics: TrendTopic[];
 };
 
+type SimilarQuestion = {
+  id: string;
+  paper_id: string;
+  module: string;
+  year: number;
+  exam: string;
+  question_number: string;
+  page_number: number | null;
+  text: string;
+};
+
+type SimilarQuestionMatch = {
+  id: string;
+  similarity: number;
+  question: SimilarQuestion;
+  similar_question: SimilarQuestion;
+};
+
+type SimilarQuestionsResponse = {
+  module: string;
+  years: number[];
+  questions_analysed: number;
+  comparisons: number;
+  similarity_threshold: number;
+  different_years_only: boolean;
+  match_count: number;
+  matches: SimilarQuestionMatch[];
+};
+
 type MainView = "search" | "trends";
 
 type SelectedMatrixCell = {
@@ -127,6 +156,20 @@ export default function Home() {
     selectedMatrixCell,
     setSelectedMatrixCell,
   ] = useState<SelectedMatrixCell>(null);
+
+  // =========================================================
+  // Similar-question state
+  // =========================================================
+
+  const [
+    similarQuestionsData,
+    setSimilarQuestionsData,
+  ] = useState<SimilarQuestionsResponse | null>(null);
+
+  const [
+    similarQuestionsMessage,
+    setSimilarQuestionsMessage,
+  ] = useState("");
 
   // =========================================================
   // API
@@ -314,6 +357,9 @@ export default function Home() {
       setTrendMessage("");
       setOpenTopics([]);
       setSelectedMatrixCell(null);
+
+      setSimilarQuestionsData(null);
+      setSimilarQuestionsMessage("");
     }
   }, [
     availableModules,
@@ -497,6 +543,9 @@ export default function Home() {
       setOpenTopics([]);
       setSelectedMatrixCell(null);
 
+      setSimilarQuestionsData(null);
+      setSimilarQuestionsMessage("");
+
       await loadPapers();
 
     } catch (error) {
@@ -571,6 +620,9 @@ export default function Home() {
       setTrendMessage("");
       setOpenTopics([]);
       setSelectedMatrixCell(null);
+
+      setSimilarQuestionsData(null);
+      setSimilarQuestionsMessage("");
 
     } catch (error) {
 
@@ -715,33 +767,74 @@ export default function Home() {
       setOpenTopics([]);
       setSelectedMatrixCell(null);
 
-      const response = await fetch(
-        `${API}/trends/${encodeURIComponent(
-          trendModule
-        )}`
-      );
+      setSimilarQuestionsData(null);
+      setSimilarQuestionsMessage("");
 
-      const data =
-        await response.json();
+      const [
+        trendsResponse,
+        similarResponse,
+      ] = await Promise.all([
+        fetch(
+          `${API}/trends/${encodeURIComponent(
+            trendModule
+          )}`
+        ),
 
-      if (!response.ok) {
+        fetch(
+          `${API}/repeated-questions/${encodeURIComponent(
+            trendModule
+          )}`
+        ),
+      ]);
+
+      const trendsData =
+        await trendsResponse.json();
+
+      if (!trendsResponse.ok) {
         throw new Error(
-          data.detail ||
+          trendsData.detail ||
           "Could not analyse trends"
         );
       }
 
       setTrendData(
-        data
+        trendsData
       );
 
       if (
-        !data.topics ||
-        data.topics.length === 0
+        !trendsData.topics ||
+        trendsData.topics.length === 0
       ) {
         setTrendMessage(
           "No recurring topics were found across multiple years for this module."
         );
+      }
+
+      const similarData =
+        await similarResponse.json();
+
+      if (similarResponse.ok) {
+
+        setSimilarQuestionsData(
+          similarData
+        );
+
+        if (
+          !similarData.matches ||
+          similarData.matches.length === 0
+        ) {
+          setSimilarQuestionsMessage(
+            "No strongly similar questions were found across different exam years."
+          );
+        }
+
+      } else {
+
+        setSimilarQuestionsMessage(
+          similarData.detail ||
+          "Could not analyse similar past questions."
+        );
+
       }
 
     } catch (error) {
@@ -869,8 +962,8 @@ export default function Home() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-zinc-500">
-              Search uses semantic retrieval, keyword matching,
-              and cross-encoder reranking.
+              Search combines semantic retrieval with keyword
+              matching to rank relevant past-paper questions.
             </p>
 
             <div className="mt-6">
@@ -1233,8 +1326,8 @@ export default function Home() {
             </h2>
 
             <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
-              Analyse semantically related questions that appear
-              across multiple exam years for a module.
+              Analyse recurring topics and identify strongly similar
+              questions that appear across different exam years.
             </p>
 
             <div className="mt-6">
@@ -1269,6 +1362,14 @@ export default function Home() {
 
                   setSelectedMatrixCell(
                     null
+                  );
+
+                  setSimilarQuestionsData(
+                    null
+                  );
+
+                  setSimilarQuestionsMessage(
+                    ""
                   );
                 }}
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-zinc-500"
@@ -1416,6 +1517,241 @@ export default function Home() {
                   </div>
 
                 )}
+
+                {/* =================================================
+                    SIMILAR PAST QUESTIONS
+                ================================================= */}
+
+                <div className="mt-10">
+
+                  <div className="mb-5">
+
+                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+
+                      <div>
+
+                        <p className="text-sm font-medium text-zinc-500">
+                          SIMILAR PAST QUESTIONS
+                        </p>
+
+                        <h3 className="mt-2 text-xl font-semibold">
+                          Possible repeated or reworded questions
+                        </h3>
+
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
+                          Strong semantic matches found between questions
+                          from different exam years. These indicate similar
+                          question patterns, not necessarily exact repeats.
+                        </p>
+
+                      </div>
+
+                      {similarQuestionsData && (
+
+                        <span className="shrink-0 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-400">
+                          {similarQuestionsData.match_count}{" "}
+                          {similarQuestionsData.match_count === 1
+                            ? "match"
+                            : "matches"}
+                        </span>
+
+                      )}
+
+                    </div>
+
+                  </div>
+
+                  {similarQuestionsMessage && (
+
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-4">
+
+                      <p className="text-sm text-zinc-400">
+                        {similarQuestionsMessage}
+                      </p>
+
+                    </div>
+
+                  )}
+
+                  {similarQuestionsData &&
+                   similarQuestionsData.matches.length > 0 && (
+
+                    <div className="space-y-5">
+
+                      {similarQuestionsData.matches.map(
+                        (
+                          match,
+                          index
+                        ) => {
+
+                          const similarityPercent =
+                            Math.max(
+                              0,
+                              Math.min(
+                                100,
+                                Math.round(
+                                  match.similarity *
+                                  100
+                                )
+                              )
+                            );
+
+                          return (
+
+                            <article
+                              key={
+                                match.id
+                              }
+                              className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950"
+                            >
+
+                              {/* Match heading */}
+
+                              <div className="flex flex-col justify-between gap-4 border-b border-zinc-800 bg-zinc-900/60 px-6 py-5 sm:flex-row sm:items-center">
+
+                                <div>
+
+                                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                    Match {index + 1}
+                                  </p>
+
+                                  <p className="mt-1 text-sm text-zinc-400">
+                                    Questions from different exam years
+                                  </p>
+
+                                </div>
+
+                                <div className="shrink-0 rounded-full border border-zinc-700 bg-zinc-950 px-4 py-2">
+
+                                  <span className="text-sm font-semibold text-zinc-200">
+                                    {similarityPercent}%
+                                  </span>
+
+                                  <span className="ml-1 text-xs text-zinc-500">
+                                    similar
+                                  </span>
+
+                                </div>
+
+                              </div>
+
+                              {/* Pair */}
+
+                              <div className="grid md:grid-cols-2">
+
+                                {/* Newer / first question */}
+
+                                <div className="border-b border-zinc-800 p-6 md:border-b-0 md:border-r">
+
+                                  <div className="flex flex-wrap items-center gap-2">
+
+                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                      {match.question.year}
+                                    </span>
+
+                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                      {match.question.exam}
+                                    </span>
+
+                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                      Question{" "}
+                                      {match.question.question_number}
+                                    </span>
+
+                                    {match.question.page_number && (
+
+                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-500">
+                                        Page{" "}
+                                        {match.question.page_number}
+                                      </span>
+
+                                    )}
+
+                                  </div>
+
+                                  <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                                    {match.question.text}
+                                  </p>
+
+                                  <a
+                                    href={
+                                      getPaperUrl(
+                                        match.question.paper_id,
+                                        match.question.page_number
+                                      )
+                                    }
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-6 inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+                                  >
+                                    Open {match.question.year} paper
+                                  </a>
+
+                                </div>
+
+                                {/* Older / similar question */}
+
+                                <div className="p-6">
+
+                                  <div className="flex flex-wrap items-center gap-2">
+
+                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                      {match.similar_question.year}
+                                    </span>
+
+                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                      {match.similar_question.exam}
+                                    </span>
+
+                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                      Question{" "}
+                                      {match.similar_question.question_number}
+                                    </span>
+
+                                    {match.similar_question.page_number && (
+
+                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-500">
+                                        Page{" "}
+                                        {match.similar_question.page_number}
+                                      </span>
+
+                                    )}
+
+                                  </div>
+
+                                  <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                                    {match.similar_question.text}
+                                  </p>
+
+                                  <a
+                                    href={
+                                      getPaperUrl(
+                                        match.similar_question.paper_id,
+                                        match.similar_question.page_number
+                                      )
+                                    }
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-6 inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+                                  >
+                                    Open {match.similar_question.year} paper
+                                  </a>
+
+                                </div>
+
+                              </div>
+
+                            </article>
+
+                          );
+                        }
+                      )}
+
+                    </div>
+
+                  )}
+
+                </div>
 
                 {/* =================================================
                     TOPIC FREQUENCY MATRIX

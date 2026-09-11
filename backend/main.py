@@ -5,7 +5,6 @@ import sqlite3
 import uuid
 
 
-
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -22,6 +21,7 @@ from search_engine import (
 from trend_engine import (
     analyse_topics,
 )
+
 
 # =========================================================
 # App
@@ -344,6 +344,45 @@ def format_question_number(
         )
 
     return question_number
+
+
+def format_repeated_question(
+    question: dict
+) -> dict:
+    """
+    Remove the embedding before returning a repeated-question
+    match to the frontend.
+
+    Embeddings are needed internally for comparison, but there
+    is no reason to send hundreds of floating-point values over
+    the API.
+    """
+
+    return {
+        "id":
+            question["id"],
+
+        "paper_id":
+            question["paper_id"],
+
+        "module":
+            question["module"],
+
+        "year":
+            question["year"],
+
+        "exam":
+            question["exam"],
+
+        "question_number":
+            question["question_number"],
+
+        "page_number":
+            question["page_number"],
+
+        "text":
+            question["text"],
+    }
 
 
 # =========================================================
@@ -1363,9 +1402,8 @@ def search_questions(
     return results[
         :request.limit
     ]
-    
-    
-    
+
+
 # =========================================================
 # Topic / trend analysis
 # =========================================================
@@ -1374,7 +1412,7 @@ def search_questions(
 def get_module_trends(
     module: str,
     minimum_years: int = 2,
-    similarity_threshold: float = 0.62,
+    similarity_threshold: float = 0.72,
 ):
 
     """
@@ -1619,4 +1657,396 @@ def get_module_trends(
 
         "topics":
             topics,
+    }
+
+
+# =========================================================
+# Repeated / reworded question detection
+# =========================================================
+
+@app.get("/repeated-questions/{module}")
+def get_repeated_questions(
+    module: str,
+    similarity_threshold: float = 0.78,
+    limit: int = 20,
+    different_years_only: bool = True,
+):
+
+    """
+    Find strongly similar exam-question pairs inside one module.
+
+    This is intentionally stricter than topic clustering.
+
+    Topic clustering asks:
+
+        "Are these questions about the same topic?"
+
+    Repeated-question detection asks:
+
+        "Are these questions close enough that they may be
+        repeated or reworded versions of one another?"
+
+    By default, only questions from different years are
+    compared.
+
+    Example:
+
+        GET /repeated-questions/CS410
+
+    Optional:
+
+        GET /repeated-questions/CS410?similarity_threshold=0.82
+
+        GET /repeated-questions/CS410?limit=10
+
+        GET /repeated-questions/CS410?different_years_only=false
+    """
+
+    normalized_module = (
+        module
+        .strip()
+        .upper()
+    )
+
+    # -----------------------------------------------------
+    # Validate
+    # -----------------------------------------------------
+
+    if not normalized_module:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Module is required",
+        )
+
+    if (
+        similarity_threshold <= 0
+        or
+        similarity_threshold > 1
+    ):
+
+        raise HTTPException(
+            status_code=400,
+            detail=
+                "similarity_threshold must be between 0 and 1",
+        )
+
+    if limit < 1:
+
+        raise HTTPException(
+            status_code=400,
+            detail=
+                "limit must be at least 1",
+        )
+
+    if limit > 100:
+
+        raise HTTPException(
+            status_code=400,
+            detail=
+                "limit cannot be greater than 100",
+        )
+
+    # -----------------------------------------------------
+    # Load questions for only this module
+    # -----------------------------------------------------
+
+    with get_database() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT
+                sq.id,
+                sq.label,
+                sq.text,
+                sq.embedding,
+                sq.page_number,
+
+                mq.question_number,
+
+                p.id AS paper_id,
+                p.module,
+                p.year,
+                p.exam
+
+            FROM sub_questions sq
+
+            JOIN main_questions mq
+                ON sq.main_question_id =
+                   mq.id
+
+            JOIN papers p
+                ON mq.paper_id =
+                   p.id
+
+            WHERE p.module = ?
+
+            ORDER BY
+                p.year DESC,
+                p.exam ASC,
+                CAST(
+                    mq.question_number
+                    AS INTEGER
+                ) ASC,
+                sq.label ASC
+            """,
+            (
+                normalized_module,
+            ),
+        ).fetchall()
+
+    if not rows:
+
+        raise HTTPException(
+            status_code=404,
+            detail=
+                f"No exam questions found for {normalized_module}",
+        )
+
+    # -----------------------------------------------------
+    # Restore embeddings
+    # -----------------------------------------------------
+
+    questions = []
+
+    for row in rows:
+
+        if row["embedding"]:
+
+            embedding = (
+                embedding_from_json(
+                    row["embedding"]
+                )
+            )
+
+        else:
+
+            # Backward compatibility for any old rows.
+            embedding = (
+                embed_text(
+                    row["text"]
+                )
+            )
+
+        question_number = (
+            format_question_number(
+                row["question_number"],
+                row["label"],
+            )
+        )
+
+        questions.append(
+            {
+                "id":
+                    row["id"],
+
+                "paper_id":
+                    row["paper_id"],
+
+                "module":
+                    row["module"],
+
+                "year":
+                    row["year"],
+
+                "exam":
+                    row["exam"],
+
+                "question_number":
+                    question_number,
+
+                "page_number":
+                    row["page_number"],
+
+                "text":
+                    row["text"],
+
+                "embedding":
+                    embedding,
+            }
+        )
+
+    # -----------------------------------------------------
+    # Compare each unique pair exactly once
+    #
+    # question_index + 1 prevents:
+    #
+    #   A -> B
+    #   B -> A
+    #
+    # from both being returned.
+    # -----------------------------------------------------
+
+    matches = []
+
+    comparison_count = 0
+
+    for question_index in range(
+        len(questions)
+    ):
+
+        first_question = questions[
+            question_index
+        ]
+
+        for second_index in range(
+            question_index + 1,
+            len(questions)
+        ):
+
+            second_question = questions[
+                second_index
+            ]
+
+            # ---------------------------------------------
+            # By default we care about recurrence across
+            # separate exam years.
+            # ---------------------------------------------
+
+            if (
+                different_years_only
+                and
+                first_question["year"]
+                ==
+                second_question["year"]
+            ):
+                continue
+
+            comparison_count += 1
+
+            # ---------------------------------------------
+            # Semantic similarity
+            # ---------------------------------------------
+
+            similarity = (
+                cosine_similarity(
+                    first_question[
+                        "embedding"
+                    ],
+                    second_question[
+                        "embedding"
+                    ],
+                )
+            )
+
+            # ---------------------------------------------
+            # Ignore weaker topic-level similarity
+            # ---------------------------------------------
+
+            if (
+                similarity
+                <
+                similarity_threshold
+            ):
+                continue
+
+            # ---------------------------------------------
+            # Return the newer question first where
+            # possible. This makes frontend presentation
+            # easier to understand:
+            #
+            # newer question -> similar older question
+            # ---------------------------------------------
+
+            newer_question = (
+                first_question
+            )
+
+            older_question = (
+                second_question
+            )
+
+            if (
+                second_question["year"]
+                >
+                first_question["year"]
+            ):
+
+                newer_question = (
+                    second_question
+                )
+
+                older_question = (
+                    first_question
+                )
+
+            matches.append(
+                {
+                    "id":
+                        (
+                            f"{newer_question['id']}"
+                            f"__"
+                            f"{older_question['id']}"
+                        ),
+
+                    "similarity":
+                        similarity,
+
+                    "question":
+                        format_repeated_question(
+                            newer_question
+                        ),
+
+                    "similar_question":
+                        format_repeated_question(
+                            older_question
+                        ),
+                }
+            )
+
+    # -----------------------------------------------------
+    # Strongest possible repeats first
+    # -----------------------------------------------------
+
+    matches.sort(
+        key=lambda item:
+            item["similarity"],
+        reverse=True,
+    )
+
+    matches = matches[
+        :limit
+    ]
+
+    # -----------------------------------------------------
+    # Years represented in this module
+    # -----------------------------------------------------
+
+    years = sorted(
+        {
+            question["year"]
+            for question
+            in questions
+        },
+        reverse=True,
+    )
+
+    return {
+        "module":
+            normalized_module,
+
+        "years":
+            years,
+
+        "questions_analysed":
+            len(
+                questions
+            ),
+
+        "comparisons":
+            comparison_count,
+
+        "similarity_threshold":
+            similarity_threshold,
+
+        "different_years_only":
+            different_years_only,
+
+        "match_count":
+            len(
+                matches
+            ),
+
+        "matches":
+            matches,
     }
