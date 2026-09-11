@@ -55,6 +55,11 @@ type TrendResponse = {
 
 type MainView = "search" | "trends";
 
+type SelectedMatrixCell = {
+  topicId: string;
+  year: number;
+} | null;
+
 export default function Home() {
   // =========================================================
   // Upload state
@@ -117,6 +122,11 @@ export default function Home() {
   const [trendMessage, setTrendMessage] = useState("");
 
   const [openTopics, setOpenTopics] = useState<string[]>([]);
+
+  const [
+    selectedMatrixCell,
+    setSelectedMatrixCell,
+  ] = useState<SelectedMatrixCell>(null);
 
   // =========================================================
   // API
@@ -203,6 +213,46 @@ export default function Home() {
   }, [papers]);
 
   // =========================================================
+  // Selected matrix data
+  // =========================================================
+
+  const selectedMatrixTopic = useMemo(() => {
+    if (
+      !trendData ||
+      !selectedMatrixCell
+    ) {
+      return null;
+    }
+
+    return (
+      trendData.topics.find(
+        (topic) =>
+          topic.id === selectedMatrixCell.topicId
+      ) || null
+    );
+  }, [
+    trendData,
+    selectedMatrixCell,
+  ]);
+
+  const selectedMatrixQuestions = useMemo(() => {
+    if (
+      !selectedMatrixTopic ||
+      !selectedMatrixCell
+    ) {
+      return [];
+    }
+
+    return selectedMatrixTopic.questions.filter(
+      (question) =>
+        question.year === selectedMatrixCell.year
+    );
+  }, [
+    selectedMatrixTopic,
+    selectedMatrixCell,
+  ]);
+
+  // =========================================================
   // Load papers
   // =========================================================
 
@@ -263,6 +313,7 @@ export default function Home() {
       setTrendData(null);
       setTrendMessage("");
       setOpenTopics([]);
+      setSelectedMatrixCell(null);
     }
   }, [
     availableModules,
@@ -305,6 +356,69 @@ export default function Home() {
         ...current,
         topicId,
       ];
+    });
+  }
+
+  // =========================================================
+  // Trend helpers
+  // =========================================================
+
+  function getTopicYearCount(
+    topic: TrendTopic,
+    targetYear: number
+  ) {
+    return topic.questions.filter(
+      (question) =>
+        question.year === targetYear
+    ).length;
+  }
+
+  function getTopicMaximumYearCount(
+    topic: TrendTopic
+  ) {
+    if (!trendData) {
+      return 1;
+    }
+
+    const counts =
+      trendData.papers_years.map(
+        (yearValue) =>
+          getTopicYearCount(
+            topic,
+            yearValue
+          )
+      );
+
+    return Math.max(
+      1,
+      ...counts
+    );
+  }
+
+  function handleMatrixCellClick(
+    topic: TrendTopic,
+    targetYear: number
+  ) {
+    const count = getTopicYearCount(
+      topic,
+      targetYear
+    );
+
+    if (count === 0) {
+      return;
+    }
+
+    if (
+      selectedMatrixCell?.topicId === topic.id &&
+      selectedMatrixCell.year === targetYear
+    ) {
+      setSelectedMatrixCell(null);
+      return;
+    }
+
+    setSelectedMatrixCell({
+      topicId: topic.id,
+      year: targetYear,
     });
   }
 
@@ -381,6 +495,7 @@ export default function Home() {
 
       setTrendData(null);
       setOpenTopics([]);
+      setSelectedMatrixCell(null);
 
       await loadPapers();
 
@@ -455,6 +570,7 @@ export default function Home() {
       setTrendData(null);
       setTrendMessage("");
       setOpenTopics([]);
+      setSelectedMatrixCell(null);
 
     } catch (error) {
 
@@ -597,6 +713,7 @@ export default function Home() {
       setTrendMessage("");
       setTrendData(null);
       setOpenTopics([]);
+      setSelectedMatrixCell(null);
 
       const response = await fetch(
         `${API}/trends/${encodeURIComponent(
@@ -756,8 +873,6 @@ export default function Home() {
               and cross-encoder reranking.
             </p>
 
-            {/* Module */}
-
             <div className="mt-6">
 
               <label className="mb-2 block text-sm text-zinc-400">
@@ -821,8 +936,6 @@ export default function Home() {
               </select>
 
             </div>
-
-            {/* Year + Exam */}
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
 
@@ -950,8 +1063,6 @@ export default function Home() {
 
             </div>
 
-            {/* Query */}
-
             <textarea
               value={
                 searchQuery
@@ -990,8 +1101,6 @@ export default function Home() {
               </p>
 
             )}
-
-            {/* Results */}
 
             {searchResults.length > 0 && (
 
@@ -1128,8 +1237,6 @@ export default function Home() {
               across multiple exam years for a module.
             </p>
 
-            {/* Module selector */}
-
             <div className="mt-6">
 
               <label className="mb-2 block text-sm text-zinc-400">
@@ -1158,6 +1265,10 @@ export default function Home() {
 
                   setOpenTopics(
                     []
+                  );
+
+                  setSelectedMatrixCell(
+                    null
                   );
                 }}
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-zinc-500"
@@ -1213,13 +1324,13 @@ export default function Home() {
 
             )}
 
-            {/* Trend results */}
-
             {trendData && (
 
               <div className="mt-8">
 
-                {/* Summary */}
+                {/* =================================================
+                    SUMMARY
+                ================================================= */}
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
@@ -1273,7 +1384,9 @@ export default function Home() {
 
                 </div>
 
-                {/* Years */}
+                {/* =================================================
+                    YEAR BADGES
+                ================================================= */}
 
                 {trendData.papers_years.length > 0 && (
 
@@ -1304,213 +1417,600 @@ export default function Home() {
 
                 )}
 
-                {/* Topic cards */}
+                {/* =================================================
+                    TOPIC FREQUENCY MATRIX
+                ================================================= */}
 
                 {trendData.topics.length > 0 && (
 
-                  <div className="mt-8 space-y-4">
+                  <div className="mt-10">
 
-                    {trendData.topics.map(
-                      (
-                        topic,
-                        index
-                      ) => {
+                    <div className="mb-5">
 
-                        const isOpen =
-                          openTopics.includes(
-                            topic.id
-                          );
+                      <p className="text-sm font-medium text-zinc-500">
+                        TOPIC FREQUENCY
+                      </p>
 
-                        const cohesionPercent =
-                          Math.round(
-                            topic.cohesion *
-                            100
-                          );
+                      <h3 className="mt-2 text-xl font-semibold">
+                        Topic history by year
+                      </h3>
 
-                        return (
+                      <p className="mt-2 text-sm leading-6 text-zinc-500">
+                        Each value shows how many questions from a recurring
+                        topic appeared in that exam year. Click a non-zero
+                        value to inspect those questions.
+                      </p>
 
-                          <article
-                            key={
-                              topic.id
-                            }
-                            className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950"
-                          >
+                    </div>
 
-                            {/* Topic header */}
+                    <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950">
 
-                            <button
-                              onClick={() =>
-                                toggleTopic(
+                      <table className="w-full min-w-[650px] border-collapse">
+
+                        <thead>
+
+                          <tr className="border-b border-zinc-800">
+
+                            <th className="px-5 py-4 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">
+                              Topic
+                            </th>
+
+                            {trendData.papers_years.map(
+                              (
+                                yearValue
+                              ) => (
+
+                                <th
+                                  key={
+                                    yearValue
+                                  }
+                                  className="px-5 py-4 text-center text-xs font-medium uppercase tracking-wide text-zinc-500"
+                                >
+                                  {yearValue}
+                                </th>
+
+                              )
+                            )}
+
+                            <th className="px-5 py-4 text-center text-xs font-medium uppercase tracking-wide text-zinc-500">
+                              Total
+                            </th>
+
+                          </tr>
+
+                        </thead>
+
+                        <tbody>
+
+                          {trendData.topics.map(
+                            (
+                              topic
+                            ) => (
+
+                              <tr
+                                key={
                                   topic.id
-                                )
-                              }
-                              className="w-full px-6 py-6 text-left transition hover:bg-zinc-900"
-                            >
+                                }
+                                className="border-b border-zinc-800 last:border-b-0"
+                              >
 
-                              <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
+                                <td className="max-w-xs px-5 py-4">
 
-                                <div className="min-w-0">
-
-                                  <div className="flex flex-wrap items-center gap-2">
-
-                                    <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">
-                                      Topic{" "}
-                                      {index + 1}
-                                    </span>
-
-                                    <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                                      {topic.question_count}{" "}
-                                      {topic.question_count === 1
-                                        ? "question"
-                                        : "questions"}
-                                    </span>
-
-                                    <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                                      {topic.appearance_count}{" "}
-                                      {topic.appearance_count === 1
-                                        ? "year"
-                                        : "years"}
-                                    </span>
-
-                                  </div>
-
-                                  <h3 className="mt-4 text-xl font-semibold leading-8">
+                                  <p className="font-medium leading-6 text-zinc-200">
                                     {topic.topic}
-                                  </h3>
-
-                                  <div className="mt-4 flex flex-wrap gap-2">
-
-                                    {topic.years.map(
-                                      (
-                                        yearValue
-                                      ) => (
-
-                                        <span
-                                          key={
-                                            yearValue
-                                          }
-                                          className="rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400"
-                                        >
-                                          {yearValue}
-                                        </span>
-
-                                      )
-                                    )}
-
-                                  </div>
-
-                                </div>
-
-                                <div className="flex shrink-0 items-center gap-4">
-
-                                  <div className="text-right">
-
-                                    <p className="text-xs uppercase tracking-wide text-zinc-600">
-                                      Cohesion
-                                    </p>
-
-                                    <p className="mt-1 font-medium text-zinc-300">
-                                      {cohesionPercent}%
-                                    </p>
-
-                                  </div>
-
-                                  <span className="text-2xl text-zinc-500">
-                                    {isOpen
-                                      ? "−"
-                                      : "+"}
-                                  </span>
-
-                                </div>
-
-                              </div>
-
-                            </button>
-
-                            {/* Expanded questions */}
-
-                            {isOpen && (
-
-                              <div className="border-t border-zinc-800">
-
-                                <div className="border-b border-zinc-800 bg-zinc-900/50 px-6 py-4">
-
-                                  <p className="text-sm text-zinc-500">
-                                    Past-paper questions grouped into this recurring topic
                                   </p>
 
-                                </div>
+                                  <p className="mt-1 text-xs text-zinc-600">
+                                    {Math.round(
+                                      topic.cohesion *
+                                      100
+                                    )}% cohesion
+                                  </p>
 
-                                {topic.questions.map(
+                                </td>
+
+                                {trendData.papers_years.map(
                                   (
-                                    question
-                                  ) => (
+                                    yearValue
+                                  ) => {
 
-                                    <div
-                                      key={
-                                        question.id
-                                      }
-                                      className="border-b border-zinc-800 px-6 py-6 last:border-b-0"
-                                    >
+                                    const count =
+                                      getTopicYearCount(
+                                        topic,
+                                        yearValue
+                                      );
 
-                                      <div className="flex flex-wrap items-center gap-2">
+                                    const isSelected =
+                                      selectedMatrixCell?.topicId ===
+                                        topic.id &&
+                                      selectedMatrixCell.year ===
+                                        yearValue;
 
-                                        <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                          {question.year}
-                                        </span>
+                                    return (
 
-                                        <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                          {question.exam}
-                                        </span>
+                                      <td
+                                        key={
+                                          yearValue
+                                        }
+                                        className="px-4 py-4 text-center"
+                                      >
 
-                                        <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                          Question{" "}
-                                          {question.question_number}
-                                        </span>
+                                        {count > 0 ? (
 
-                                        {question.page_number && (
+                                          <button
+                                            onClick={() =>
+                                              handleMatrixCellClick(
+                                                topic,
+                                                yearValue
+                                              )
+                                            }
+                                            className={`inline-flex h-10 min-w-10 items-center justify-center rounded-lg border px-3 text-sm font-semibold transition ${
+                                              isSelected
+                                                ? "border-white bg-white text-black"
+                                                : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800"
+                                            }`}
+                                          >
+                                            {count}
+                                          </button>
 
-                                          <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-400">
-                                            Page{" "}
-                                            {question.page_number}
+                                        ) : (
+
+                                          <span className="text-sm text-zinc-700">
+                                            —
                                           </span>
 
                                         )}
 
-                                      </div>
+                                      </td>
 
-                                      <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
-                                        {question.text}
-                                      </p>
-
-                                      <a
-                                        href={
-                                          getPaperUrl(
-                                            question.paper_id,
-                                            question.page_number
-                                          )
-                                        }
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="mt-5 inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
-                                      >
-                                        Open source paper
-                                      </a>
-
-                                    </div>
-
-                                  )
+                                    );
+                                  }
                                 )}
 
-                              </div>
+                                <td className="px-5 py-4 text-center font-semibold text-zinc-300">
+                                  {topic.question_count}
+                                </td>
+
+                              </tr>
+
+                            )
+                          )}
+
+                        </tbody>
+
+                      </table>
+
+                    </div>
+
+                  </div>
+
+                )}
+
+                {/* =================================================
+                    SELECTED MATRIX CELL QUESTIONS
+                ================================================= */}
+
+                {selectedMatrixCell &&
+                 selectedMatrixTopic && (
+
+                  <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950">
+
+                    <div className="flex flex-col justify-between gap-4 border-b border-zinc-800 bg-zinc-900/70 px-6 py-5 md:flex-row md:items-center">
+
+                      <div>
+
+                        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                          SELECTED YEAR
+                        </p>
+
+                        <h3 className="mt-2 text-lg font-semibold">
+                          {selectedMatrixTopic.topic}
+                        </h3>
+
+                        <p className="mt-1 text-sm text-zinc-400">
+                          {selectedMatrixCell.year} ·{" "}
+                          {selectedMatrixQuestions.length}{" "}
+                          {selectedMatrixQuestions.length === 1
+                            ? "question"
+                            : "questions"}
+                        </p>
+
+                      </div>
+
+                      <button
+                        onClick={() =>
+                          setSelectedMatrixCell(
+                            null
+                          )
+                        }
+                        className="self-start rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 transition hover:bg-zinc-800 hover:text-white md:self-auto"
+                      >
+                        Close
+                      </button>
+
+                    </div>
+
+                    {selectedMatrixQuestions.map(
+                      (
+                        question
+                      ) => (
+
+                        <div
+                          key={
+                            question.id
+                          }
+                          className="border-b border-zinc-800 px-6 py-6 last:border-b-0"
+                        >
+
+                          <div className="flex flex-wrap items-center gap-2">
+
+                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                              {question.year}
+                            </span>
+
+                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                              {question.exam}
+                            </span>
+
+                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                              Question{" "}
+                              {question.question_number}
+                            </span>
+
+                            {question.page_number && (
+
+                              <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-400">
+                                Page{" "}
+                                {question.page_number}
+                              </span>
 
                             )}
 
-                          </article>
+                          </div>
 
-                        );
-                      }
+                          <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                            {question.text}
+                          </p>
+
+                          <a
+                            href={
+                              getPaperUrl(
+                                question.paper_id,
+                                question.page_number
+                              )
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-5 inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+                          >
+                            Open source paper
+                          </a>
+
+                        </div>
+
+                      )
                     )}
+
+                  </div>
+
+                )}
+
+                {/* =================================================
+                    TOPIC CARDS
+                ================================================= */}
+
+                {trendData.topics.length > 0 && (
+
+                  <div className="mt-10">
+
+                    <div className="mb-5">
+
+                      <p className="text-sm font-medium text-zinc-500">
+                        TOPIC DETAILS
+                      </p>
+
+                      <h3 className="mt-2 text-xl font-semibold">
+                        Recurring topic breakdown
+                      </h3>
+
+                    </div>
+
+                    <div className="space-y-4">
+
+                      {trendData.topics.map(
+                        (
+                          topic,
+                          index
+                        ) => {
+
+                          const isOpen =
+                            openTopics.includes(
+                              topic.id
+                            );
+
+                          const cohesionPercent =
+                            Math.round(
+                              topic.cohesion *
+                              100
+                            );
+
+                          const maximumYearCount =
+                            getTopicMaximumYearCount(
+                              topic
+                            );
+
+                          return (
+
+                            <article
+                              key={
+                                topic.id
+                              }
+                              className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950"
+                            >
+
+                              {/* Topic header */}
+
+                              <button
+                                onClick={() =>
+                                  toggleTopic(
+                                    topic.id
+                                  )
+                                }
+                                className="w-full px-6 py-6 text-left transition hover:bg-zinc-900"
+                              >
+
+                                <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
+
+                                  <div className="min-w-0">
+
+                                    <div className="flex flex-wrap items-center gap-2">
+
+                                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">
+                                        Topic{" "}
+                                        {index + 1}
+                                      </span>
+
+                                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
+                                        {topic.question_count}{" "}
+                                        {topic.question_count === 1
+                                          ? "question"
+                                          : "questions"}
+                                      </span>
+
+                                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
+                                        {topic.appearance_count}{" "}
+                                        {topic.appearance_count === 1
+                                          ? "year"
+                                          : "years"}
+                                      </span>
+
+                                    </div>
+
+                                    <h3 className="mt-4 text-xl font-semibold leading-8">
+                                      {topic.topic}
+                                    </h3>
+
+                                    <div className="mt-4 flex flex-wrap gap-2">
+
+                                      {topic.years.map(
+                                        (
+                                          yearValue
+                                        ) => (
+
+                                          <span
+                                            key={
+                                              yearValue
+                                            }
+                                            className="rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400"
+                                          >
+                                            {yearValue}
+                                          </span>
+
+                                        )
+                                      )}
+
+                                    </div>
+
+                                  </div>
+
+                                  <div className="flex shrink-0 items-center gap-4">
+
+                                    <div className="text-right">
+
+                                      <p className="text-xs uppercase tracking-wide text-zinc-600">
+                                        Cohesion
+                                      </p>
+
+                                      <p className="mt-1 font-medium text-zinc-300">
+                                        {cohesionPercent}%
+                                      </p>
+
+                                    </div>
+
+                                    <span className="text-2xl text-zinc-500">
+                                      {isOpen
+                                        ? "−"
+                                        : "+"}
+                                    </span>
+
+                                  </div>
+
+                                </div>
+
+                              </button>
+
+                              {/* Expanded topic */}
+
+                              {isOpen && (
+
+                                <div className="border-t border-zinc-800">
+
+                                  {/* Frequency bars */}
+
+                                  <div className="border-b border-zinc-800 bg-zinc-900/40 px-6 py-6">
+
+                                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                      Frequency by year
+                                    </p>
+
+                                    <div className="mt-5 space-y-4">
+
+                                      {trendData.papers_years.map(
+                                        (
+                                          yearValue
+                                        ) => {
+
+                                          const count =
+                                            getTopicYearCount(
+                                              topic,
+                                              yearValue
+                                            );
+
+                                          const widthPercentage =
+                                            count === 0
+                                              ? 0
+                                              : Math.max(
+                                                  10,
+                                                  (
+                                                    count /
+                                                    maximumYearCount
+                                                  ) *
+                                                    100
+                                                );
+
+                                          return (
+
+                                            <div
+                                              key={
+                                                yearValue
+                                              }
+                                            >
+
+                                              <div className="mb-2 flex items-center justify-between gap-4">
+
+                                                <span className="text-sm font-medium text-zinc-300">
+                                                  {yearValue}
+                                                </span>
+
+                                                <span className="text-sm text-zinc-500">
+                                                  {count}{" "}
+                                                  {count === 1
+                                                    ? "question"
+                                                    : "questions"}
+                                                </span>
+
+                                              </div>
+
+                                              <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+
+                                                {count > 0 && (
+
+                                                  <div
+                                                    className="h-full rounded-full bg-zinc-300 transition-all"
+                                                    style={{
+                                                      width:
+                                                        `${widthPercentage}%`,
+                                                    }}
+                                                  />
+
+                                                )}
+
+                                              </div>
+
+                                            </div>
+
+                                          );
+                                        }
+                                      )}
+
+                                    </div>
+
+                                  </div>
+
+                                  {/* Questions heading */}
+
+                                  <div className="border-b border-zinc-800 bg-zinc-900/50 px-6 py-4">
+
+                                    <p className="text-sm text-zinc-500">
+                                      Past-paper questions grouped into this recurring topic
+                                    </p>
+
+                                  </div>
+
+                                  {/* Questions */}
+
+                                  {topic.questions.map(
+                                    (
+                                      question
+                                    ) => (
+
+                                      <div
+                                        key={
+                                          question.id
+                                        }
+                                        className="border-b border-zinc-800 px-6 py-6 last:border-b-0"
+                                      >
+
+                                        <div className="flex flex-wrap items-center gap-2">
+
+                                          <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                            {question.year}
+                                          </span>
+
+                                          <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                            {question.exam}
+                                          </span>
+
+                                          <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                            Question{" "}
+                                            {question.question_number}
+                                          </span>
+
+                                          {question.page_number && (
+
+                                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-400">
+                                              Page{" "}
+                                              {question.page_number}
+                                            </span>
+
+                                          )}
+
+                                        </div>
+
+                                        <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                                          {question.text}
+                                        </p>
+
+                                        <a
+                                          href={
+                                            getPaperUrl(
+                                              question.paper_id,
+                                              question.page_number
+                                            )
+                                          }
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="mt-5 inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+                                        >
+                                          Open source paper
+                                        </a>
+
+                                      </div>
+
+                                    )
+                                  )}
+
+                                </div>
+
+                              )}
+
+                            </article>
+
+                          );
+                        }
+                      )}
+
+                    </div>
 
                   </div>
 
@@ -1760,8 +2260,6 @@ export default function Home() {
                         className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900"
                       >
 
-                        {/* Module header */}
-
                         <button
                           onClick={() =>
                             toggleModule(
@@ -1796,8 +2294,6 @@ export default function Home() {
                           </span>
 
                         </button>
-
-                        {/* Papers */}
 
                         {isOpen && (
 
