@@ -4,6 +4,8 @@ import shutil
 import sqlite3
 import uuid
 
+
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -17,7 +19,9 @@ from search_engine import (
     embedding_from_json,
     cosine_similarity,
 )
-
+from trend_engine import (
+    analyse_topics,
+)
 
 # =========================================================
 # App
@@ -1359,3 +1363,260 @@ def search_questions(
     return results[
         :request.limit
     ]
+    
+    
+    
+# =========================================================
+# Topic / trend analysis
+# =========================================================
+
+@app.get("/trends/{module}")
+def get_module_trends(
+    module: str,
+    minimum_years: int = 2,
+    similarity_threshold: float = 0.62,
+):
+
+    """
+    Analyse recurring topics across past exam papers
+    for one module.
+
+    Example:
+
+        GET /trends/CS410
+
+    Optional:
+
+        GET /trends/CS410?minimum_years=3
+
+    This uses the same semantic embeddings already stored
+    for search. No new embeddings or database tables are
+    required.
+    """
+
+    normalized_module = (
+        module
+        .strip()
+        .upper()
+    )
+
+    if not normalized_module:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Module is required",
+        )
+
+    if minimum_years < 1:
+
+        raise HTTPException(
+            status_code=400,
+            detail=
+                "minimum_years must be at least 1",
+        )
+
+    if (
+        similarity_threshold <= 0
+        or
+        similarity_threshold > 1
+    ):
+
+        raise HTTPException(
+            status_code=400,
+            detail=
+                "similarity_threshold must be between 0 and 1",
+        )
+
+    # -----------------------------------------------------
+    # Load questions from only the requested module
+    # -----------------------------------------------------
+
+    with get_database() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT
+                sq.id,
+                sq.label,
+                sq.text,
+                sq.embedding,
+                sq.page_number,
+
+                mq.question_number,
+
+                p.id AS paper_id,
+                p.module,
+                p.year,
+                p.exam
+
+            FROM sub_questions sq
+
+            JOIN main_questions mq
+                ON sq.main_question_id =
+                   mq.id
+
+            JOIN papers p
+                ON mq.paper_id =
+                   p.id
+
+            WHERE p.module = ?
+
+            ORDER BY
+                p.year DESC,
+                CAST(
+                    mq.question_number
+                    AS INTEGER
+                ) ASC,
+                sq.label ASC
+            """,
+            (
+                normalized_module,
+            ),
+        ).fetchall()
+
+    if not rows:
+
+        raise HTTPException(
+            status_code=404,
+            detail=
+                f"No exam questions found for {normalized_module}",
+        )
+
+    # -----------------------------------------------------
+    # Restore embeddings
+    # -----------------------------------------------------
+
+    questions = []
+
+    for row in rows:
+
+        if row["embedding"]:
+
+            embedding = (
+                embedding_from_json(
+                    row[
+                        "embedding"
+                    ]
+                )
+            )
+
+        else:
+
+            # Compatibility with any old question that
+            # does not yet have a stored embedding.
+            embedding = (
+                embed_text(
+                    row[
+                        "text"
+                    ]
+                )
+            )
+
+        question_number = (
+            format_question_number(
+                row[
+                    "question_number"
+                ],
+                row[
+                    "label"
+                ],
+            )
+        )
+
+        questions.append(
+            {
+                "id":
+                    row["id"],
+
+                "paper_id":
+                    row[
+                        "paper_id"
+                    ],
+
+                "module":
+                    row[
+                        "module"
+                    ],
+
+                "year":
+                    row[
+                        "year"
+                    ],
+
+                "exam":
+                    row[
+                        "exam"
+                    ],
+
+                "question_number":
+                    question_number,
+
+                "page_number":
+                    row[
+                        "page_number"
+                    ],
+
+                "text":
+                    row[
+                        "text"
+                    ],
+
+                "embedding":
+                    embedding,
+            }
+        )
+
+    # -----------------------------------------------------
+    # Analyse
+    # -----------------------------------------------------
+
+    topics = analyse_topics(
+        questions,
+        minimum_years=
+            minimum_years,
+        similarity_threshold=
+            similarity_threshold,
+    )
+
+    all_years = sorted(
+        {
+            question[
+                "year"
+            ]
+            for question
+            in questions
+        },
+        reverse=True,
+    )
+
+    return {
+        "module":
+            normalized_module,
+
+        "papers_years":
+            all_years,
+
+        "years_analysed":
+            len(
+                all_years
+            ),
+
+        "questions_analysed":
+            len(
+                questions
+            ),
+
+        "topic_count":
+            len(
+                topics
+            ),
+
+        "similarity_threshold":
+            similarity_threshold,
+
+        "minimum_years":
+            minimum_years,
+
+        "topics":
+            topics,
+    }
