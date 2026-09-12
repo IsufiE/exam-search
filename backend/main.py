@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import re
 import shutil
 import sqlite3
@@ -30,16 +31,100 @@ from trend_engine import (
 
 app = FastAPI(
     title="Exam Search API",
-    version="0.1.0"
+    version="0.1.0",
+)
+
+
+# =========================================================
+# Environment / configuration
+# =========================================================
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def get_allowed_origins() -> list[str]:
+
+    configured_origins = os.getenv(
+        "ALLOWED_ORIGINS"
+    )
+
+    if configured_origins:
+
+        return [
+            origin.strip()
+            for origin in configured_origins.split(",")
+            if origin.strip()
+        ]
+
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
+
+def get_storage_directory() -> Path:
+
+    configured_path = os.getenv(
+        "STORAGE_DIR"
+    )
+
+    if configured_path:
+        return Path(
+            configured_path
+        ).expanduser().resolve()
+
+    return (
+        BASE_DIR
+        /
+        "storage"
+    )
+
+
+def get_database_path() -> Path:
+
+    configured_path = os.getenv(
+        "DATABASE_PATH"
+    )
+
+    if configured_path:
+        return Path(
+            configured_path
+        ).expanduser().resolve()
+
+    return (
+        BASE_DIR
+        /
+        "papers.db"
+    )
+
+
+ALLOWED_ORIGINS = (
+    get_allowed_origins()
+)
+
+STORAGE_DIR = (
+    get_storage_directory()
+)
+
+DATABASE_PATH = (
+    get_database_path()
+)
+
+
+STORAGE_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+DATABASE_PATH.parent.mkdir(
+    parents=True,
+    exist_ok=True,
 )
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,28 +132,22 @@ app.add_middleware(
 
 
 # =========================================================
-# Paths
-# =========================================================
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-STORAGE_DIR = BASE_DIR / "storage"
-DATABASE_PATH = BASE_DIR / "papers.db"
-
-STORAGE_DIR.mkdir(exist_ok=True)
-
-
-# =========================================================
 # Database
 # =========================================================
 
 def get_database():
-    connection = sqlite3.connect(DATABASE_PATH)
+
+    connection = sqlite3.connect(
+        DATABASE_PATH
+    )
+
     connection.row_factory = sqlite3.Row
+
     return connection
 
 
 def create_tables():
+
     with get_database() as connection:
 
         connection.execute(
@@ -123,6 +202,7 @@ def create_tables():
         ]
 
         if "embedding" not in column_names:
+
             connection.execute(
                 """
                 ALTER TABLE sub_questions
@@ -131,6 +211,7 @@ def create_tables():
             )
 
         if "page_number" not in column_names:
+
             connection.execute(
                 """
                 ALTER TABLE sub_questions
@@ -202,11 +283,13 @@ STOP_WORDS = {
 }
 
 
-def tokenize_search_text(text: str) -> set[str]:
+def tokenize_search_text(
+    text: str
+) -> set[str]:
 
     tokens = re.findall(
         r"[A-Za-z0-9][A-Za-z0-9+\-*/.]*",
-        text.lower()
+        text.lower(),
     )
 
     return {
@@ -221,7 +304,7 @@ def tokenize_search_text(text: str) -> set[str]:
 
 def keyword_similarity(
     query: str,
-    question: str
+    question: str,
 ) -> float:
 
     query_tokens = tokenize_search_text(
@@ -248,7 +331,7 @@ def keyword_similarity(
 
 def hybrid_score(
     semantic_score: float,
-    keyword_score: float
+    keyword_score: float,
 ) -> float:
 
     return (
@@ -264,7 +347,7 @@ def hybrid_score(
 
 def find_question_page(
     full_text: str,
-    question_text: str
+    question_text: str,
 ) -> int | None:
 
     question_position = full_text.find(
@@ -273,7 +356,9 @@ def find_question_page(
 
     if question_position == -1:
 
-        question_prefix = question_text[:100]
+        question_prefix = (
+            question_text[:100]
+        )
 
         question_position = full_text.find(
             question_prefix
@@ -289,7 +374,7 @@ def find_question_page(
     page_matches = list(
         re.finditer(
             r"--- PAGE (\d+) ---",
-            text_before_question
+            text_before_question,
         )
     )
 
@@ -303,10 +388,11 @@ def find_question_page(
 
 def format_question_number(
     question_number: str,
-    label: str
+    label: str,
 ) -> str:
 
     if label:
+
         return (
             f"{question_number}({label})"
         )
@@ -315,7 +401,7 @@ def format_question_number(
 
 
 def format_repeated_question(
-    question: dict
+    question: dict,
 ) -> dict:
 
     return {
@@ -352,6 +438,7 @@ def format_repeated_question(
 # =========================================================
 
 class SearchRequest(BaseModel):
+
     query: str
     module: str
 
@@ -368,6 +455,7 @@ class SearchRequest(BaseModel):
 
 @app.get("/")
 def root():
+
     return {
         "message":
             "Exam Search API is running"
@@ -376,6 +464,7 @@ def root():
 
 @app.get("/health")
 def health():
+
     return {
         "status": "ok"
     }
@@ -420,7 +509,7 @@ def get_papers():
 
 @app.get("/papers/{paper_id}/file")
 def get_paper_file(
-    paper_id: str
+    paper_id: str,
 ):
 
     with get_database() as connection:
@@ -435,14 +524,16 @@ def get_paper_file(
 
             WHERE id = ?
             """,
-            (paper_id,)
+            (
+                paper_id,
+            ),
         ).fetchone()
 
     if paper is None:
 
         raise HTTPException(
             status_code=404,
-            detail="Paper not found"
+            detail="Paper not found",
         )
 
     pdf_path = (
@@ -455,7 +546,7 @@ def get_paper_file(
 
         raise HTTPException(
             status_code=404,
-            detail="PDF file not found"
+            detail="PDF file not found",
         )
 
     return FileResponse(
@@ -476,7 +567,7 @@ def get_paper_file(
     "/papers/{paper_id}/questions"
 )
 def get_paper_questions(
-    paper_id: str
+    paper_id: str,
 ):
 
     with get_database() as connection:
@@ -497,7 +588,9 @@ def get_paper_questions(
                     AS INTEGER
                 )
             """,
-            (paper_id,)
+            (
+                paper_id,
+            ),
         ).fetchall()
 
         result = []
@@ -520,7 +613,7 @@ def get_paper_questions(
                 """,
                 (
                     main_row["id"],
-                )
+                ),
             ).fetchall()
 
             result.append(
@@ -533,6 +626,7 @@ def get_paper_questions(
                     "sub_questions": [
                         {
                             **dict(row),
+
                             "text":
                                 clean_question_text(
                                     row["text"]
@@ -555,14 +649,14 @@ async def upload_paper(
     module: str = Form(...),
     year: int = Form(...),
     exam: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
 ):
 
     if not file.filename:
 
         raise HTTPException(
             status_code=400,
-            detail="File must have a filename"
+            detail="File must have a filename",
         )
 
     if not file.filename.lower().endswith(
@@ -571,7 +665,7 @@ async def upload_paper(
 
         raise HTTPException(
             status_code=400,
-            detail="Only PDF files are allowed"
+            detail="Only PDF files are allowed",
         )
 
     normalized_module = (
@@ -606,7 +700,7 @@ async def upload_paper(
                 year,
                 normalized_exam,
                 normalized_filename,
-            )
+            ),
         ).fetchone()
 
     if existing_paper:
@@ -614,7 +708,7 @@ async def upload_paper(
         raise HTTPException(
             status_code=409,
             detail=
-                "This paper has already been uploaded"
+                "This paper has already been uploaded",
         )
 
     paper_id = str(
@@ -637,7 +731,7 @@ async def upload_paper(
 
         shutil.copyfileobj(
             file.file,
-            buffer
+            buffer,
         )
 
     try:
@@ -661,7 +755,7 @@ async def upload_paper(
             raise HTTPException(
                 status_code=422,
                 detail=
-                    "No exam questions could be detected in this PDF"
+                    "No exam questions could be detected in this PDF",
             )
 
     except HTTPException:
@@ -676,7 +770,7 @@ async def upload_paper(
         raise HTTPException(
             status_code=500,
             detail=
-                f"Could not parse PDF: {error}"
+                f"Could not parse PDF: {error}",
         )
 
     with get_database() as connection:
@@ -701,7 +795,7 @@ async def upload_paper(
                 normalized_exam,
                 normalized_filename,
                 stored_filename,
-            )
+            ),
         )
 
         total_sub_questions = 0
@@ -728,7 +822,7 @@ async def upload_paper(
                     question[
                         "question_number"
                     ],
-                )
+                ),
             )
 
             for sub_question in question[
@@ -765,7 +859,7 @@ async def upload_paper(
                 page_number = (
                     find_question_page(
                         full_text,
-                        question_text
+                        question_text,
                     )
                 )
 
@@ -789,7 +883,7 @@ async def upload_paper(
                         question_text,
                         embedding_json,
                         page_number,
-                    )
+                    ),
                 )
 
                 total_sub_questions += 1
@@ -829,7 +923,7 @@ async def upload_paper(
 
 @app.delete("/papers/{paper_id}")
 def delete_paper(
-    paper_id: str
+    paper_id: str,
 ):
 
     with get_database() as connection:
@@ -842,28 +936,30 @@ def delete_paper(
 
             WHERE id = ?
             """,
-            (paper_id,)
+            (
+                paper_id,
+            ),
         ).fetchone()
 
         if paper is None:
 
             raise HTTPException(
                 status_code=404,
-                detail="Paper not found"
+                detail="Paper not found",
             )
 
-        main_questions = (
-            connection.execute(
-                """
-                SELECT id
+        main_questions = connection.execute(
+            """
+            SELECT id
 
-                FROM main_questions
+            FROM main_questions
 
-                WHERE paper_id = ?
-                """,
-                (paper_id,)
-            ).fetchall()
-        )
+            WHERE paper_id = ?
+            """,
+            (
+                paper_id,
+            ),
+        ).fetchall()
 
         for main_question in main_questions:
 
@@ -875,7 +971,7 @@ def delete_paper(
                 """,
                 (
                     main_question["id"],
-                )
+                ),
             )
 
         connection.execute(
@@ -884,7 +980,9 @@ def delete_paper(
 
             WHERE paper_id = ?
             """,
-            (paper_id,)
+            (
+                paper_id,
+            ),
         )
 
         connection.execute(
@@ -893,7 +991,9 @@ def delete_paper(
 
             WHERE id = ?
             """,
-            (paper_id,)
+            (
+                paper_id,
+            ),
         )
 
         connection.commit()
@@ -963,7 +1063,7 @@ def backfill_embeddings():
                 (
                     embedding_json,
                     row["id"],
-                )
+                ),
             )
 
             updated += 1
@@ -1036,7 +1136,7 @@ def backfill_pages():
                 """,
                 (
                     paper["id"],
-                )
+                ),
             ).fetchall()
 
             for row in rows:
@@ -1044,7 +1144,7 @@ def backfill_pages():
                 page_number = (
                     find_question_page(
                         full_text,
-                        row["text"]
+                        row["text"],
                     )
                 )
 
@@ -1059,7 +1159,7 @@ def backfill_pages():
                     (
                         page_number,
                         row["id"],
-                    )
+                    ),
                 )
 
                 updated += 1
@@ -1081,7 +1181,7 @@ def backfill_pages():
 
 @app.post("/search")
 def search_questions(
-    request: SearchRequest
+    request: SearchRequest,
 ):
 
     if not request.query.strip():
@@ -1089,14 +1189,14 @@ def search_questions(
         raise HTTPException(
             status_code=400,
             detail=
-                "Search query cannot be empty"
+                "Search query cannot be empty",
         )
 
     if not request.module.strip():
 
         raise HTTPException(
             status_code=400,
-            detail="Module is required"
+            detail="Module is required",
         )
 
     if request.limit < 1:
@@ -1104,7 +1204,7 @@ def search_questions(
         raise HTTPException(
             status_code=400,
             detail=
-                "Search limit must be at least 1"
+                "Search limit must be at least 1",
         )
 
     normalized_module = (
@@ -1179,7 +1279,7 @@ def search_questions(
 
         rows = connection.execute(
             sql_query,
-            params
+            params,
         ).fetchall()
 
     results = []
@@ -1205,7 +1305,7 @@ def search_questions(
         semantic_score = (
             cosine_similarity(
                 query_embedding,
-                question_embedding
+                question_embedding,
             )
         )
 
@@ -1219,13 +1319,13 @@ def search_questions(
         keyword_score = (
             keyword_similarity(
                 request.query,
-                row["text"]
+                row["text"],
             )
         )
 
         score = hybrid_score(
             semantic_score,
-            keyword_score
+            keyword_score,
         )
 
         display_question_number = (
@@ -1233,7 +1333,7 @@ def search_questions(
                 row[
                     "question_number"
                 ],
-                row["label"]
+                row["label"],
             )
         )
 
@@ -1279,7 +1379,7 @@ def search_questions(
     results.sort(
         key=lambda item:
             item["score"],
-        reverse=True
+        reverse=True,
     )
 
     return results[

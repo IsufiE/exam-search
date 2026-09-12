@@ -1,30 +1,16 @@
 import json
 
 import numpy as np
-
-from sentence_transformers import (
-    SentenceTransformer,
-    CrossEncoder,
-)
+from sentence_transformers import SentenceTransformer
 
 
 # =========================================================
-# Models
+# Model
 # =========================================================
 
-# Used for fast semantic retrieval.
+# Used for semantic retrieval.
 embedding_model = SentenceTransformer(
     "all-MiniLM-L6-v2"
-)
-
-
-# Used for second-stage reranking.
-#
-# This model sees the user's query and the candidate
-# exam question together, allowing it to make a stronger
-# relevance judgement than embedding similarity alone.
-reranker_model = CrossEncoder(
-    "cross-encoder/ms-marco-MiniLM-L-6-v2"
 )
 
 
@@ -50,7 +36,7 @@ def embed_text(text: str):
 # =========================================================
 
 def embedding_to_json(
-    embedding
+    embedding,
 ) -> str:
     """
     Convert a numpy embedding into JSON
@@ -63,7 +49,7 @@ def embedding_to_json(
 
 
 def embedding_from_json(
-    value: str
+    value: str,
 ):
     """
     Restore an embedding stored in SQLite.
@@ -118,76 +104,3 @@ def cosine_similarity(
     return float(
         similarity
     )
-
-
-# =========================================================
-# Cross-encoder reranking
-# =========================================================
-
-def rerank_questions(
-    query: str,
-    question_texts: list[str],
-) -> list[float]:
-    """
-    Compare a query against multiple candidate
-    exam questions using the cross-encoder.
-
-    The cross-encoder receives pairs like:
-
-        [
-            query,
-            exam_question
-        ]
-
-    It returns raw logits.
-
-    We convert those raw scores into values between
-    0 and 1 using a sigmoid.
-    """
-
-    if not question_texts:
-        return []
-
-    pairs = [
-        [
-            query,
-            question_text,
-        ]
-        for question_text
-        in question_texts
-    ]
-
-    raw_scores = reranker_model.predict(
-        pairs,
-        show_progress_bar=False,
-    )
-
-    raw_scores = np.asarray(
-        raw_scores,
-        dtype=np.float32,
-    ).reshape(-1)
-
-    # Keep sigmoid numerically stable.
-    raw_scores = np.clip(
-        raw_scores,
-        -30,
-        30,
-    )
-
-    probabilities = (
-        1.0
-        /
-        (
-            1.0
-            +
-            np.exp(
-                -raw_scores
-            )
-        )
-    )
-
-    return [
-        float(score)
-        for score
-        in probabilities
-    ]
