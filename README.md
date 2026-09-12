@@ -6,6 +6,32 @@ It extracts questions from uploaded PDF exam papers, generates semantic embeddin
 
 The application also analyses historical exam papers to identify recurring topics, topic frequency across years, and questions that may have been repeated or reworded.
 
+## Screenshots
+
+### Semantic Search
+
+Search past exam questions using natural-language queries and rank results by relevance.
+
+![Semantic search results](docs/images/search-results.png)
+
+### Recurring Topic Analysis
+
+Analyse past papers to identify topics that have appeared across multiple exam years.
+
+![Recurring topic analysis](docs/images/trends.png)
+
+### Topic Frequency Dashboard
+
+Compare how often recurring topics appear across different exam years.
+
+![Topic frequency dashboard](docs/images/topic-frequency.png)
+
+### Similar Past Questions
+
+Identify questions from different years that are semantically similar or potentially reworded versions of one another.
+
+![Similar past questions](docs/images/similar-questions.png)
+
 ## Features
 
 ### PDF Exam Paper Upload
@@ -93,35 +119,17 @@ Modules, years, and exam sessions are derived dynamically from uploaded papers, 
 - TypeScript
 - Tailwind CSS
 
+## Architecture
+
+![Exam Search architecture](docs/images/architecture.png)
+
+Exam Search separates the user interface, API layer, document-processing pipeline, semantic search, analysis engine, and persistent storage.
+
+The Next.js frontend communicates with the FastAPI backend through REST API requests. The backend handles PDF ingestion, question parsing, embedding generation, semantic search, recurring-topic analysis, and similar-question detection.
+
+SQLite provides persistent storage for extracted questions, exam metadata, page locations, and vector embeddings.
+
 ## How It Works
-
-The main processing pipeline is:
-
-```text
-Exam PDF
-   |
-   v
-PDF Text Extraction
-   |
-   v
-Question Parsing
-   |
-   v
-Question Embeddings
-   |
-   v
-SQLite
-   |
-   +----------------------+
-   |                      |
-   v                      v
-Semantic Search      Trend Analysis
-                          |
-                          +-------------------+
-                          |                   |
-                          v                   v
-                  Topic Frequency      Similar Questions
-```
 
 When a paper is uploaded:
 
@@ -132,6 +140,29 @@ When a paper is uploaded:
 5. Questions, metadata, page numbers, and embeddings are stored in SQLite.
 
 Stored embeddings are reused for search and analysis rather than being regenerated for every request.
+
+### Search Flow
+
+When a user searches for a question:
+
+1. The search query is converted into an embedding.
+2. Questions are restricted to the selected module and optional year/exam filters.
+3. Cosine similarity is calculated between the query and stored question embeddings.
+4. Keyword overlap is calculated between the query and each candidate question.
+5. Semantic similarity and keyword similarity are combined into a hybrid relevance score.
+6. Results are ranked and returned to the frontend.
+7. Users can navigate from a result back to its original exam paper.
+
+### Analysis Flow
+
+For historical analysis:
+
+1. Stored question embeddings are loaded for the selected module.
+2. Semantically related questions are grouped into recurring topics.
+3. Topics appearing across multiple years are identified.
+4. Topic frequency is calculated across exam years.
+5. Question pairs from different years are compared to identify strongly similar or potentially reworded questions.
+6. Results are presented through the Trends dashboard.
 
 ## Search Ranking
 
@@ -191,6 +222,14 @@ exam-search/
 ├── frontend/
 │   └── app/
 │       └── page.tsx
+│
+├── docs/
+│   └── images/
+│       ├── architecture.png
+│       ├── search-results.png
+│       ├── trends.png
+│       ├── topic-frequency.png
+│       └── similar-questions.png
 │
 ├── storage/
 ├── papers.db
@@ -274,9 +313,9 @@ http://localhost:3000
 Exam Search currently supports:
 
 - Multi-module exam paper uploads
-- Automatic question parsing
+- Automatic question parsing across different exam formats
 - Persistent SQLite storage
-- Semantic embeddings
+- Sentence Transformer embeddings
 - Hybrid semantic and keyword search
 - Dynamic module/year/exam filtering
 - Recurring topic detection
@@ -296,7 +335,7 @@ Potential future improvements include:
 - More advanced ranking and reranking
 - Support for additional document formats
 - Improved handling of mathematical PDF encoding
-- Automated tests
+- Automated backend and parser tests
 - Deployment
 - Authentication and user-specific paper libraries
 - Additional exam analytics and visualisations
