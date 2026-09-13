@@ -176,10 +176,8 @@ export default function Home() {
   // =========================================================
 
   const API =
-
-  process.env.NEXT_PUBLIC_API_URL ??
-
-  "http://127.0.0.1:8000";
+    process.env.NEXT_PUBLIC_API_URL ??
+    "http://127.0.0.1:8000";
 
   // =========================================================
   // Filter options
@@ -230,6 +228,18 @@ export default function Home() {
     selectedModule,
     selectedYear,
   ]);
+
+  // =========================================================
+  // Portfolio stats
+  // =========================================================
+
+  const indexedYears = useMemo(() => {
+    return Array.from(
+      new Set(
+        papers.map((paper) => paper.year)
+      )
+    ).sort((a, b) => b - a);
+  }, [papers]);
 
   // =========================================================
   // Grouped library
@@ -320,15 +330,10 @@ export default function Home() {
       const data = await response.json();
 
       setPapers(data);
-
     } catch (error) {
-
       console.error(error);
-
     } finally {
-
       setLoadingPapers(false);
-
     }
   }
 
@@ -551,9 +556,7 @@ export default function Home() {
       setSimilarQuestionsMessage("");
 
       await loadPapers();
-
     } catch (error) {
-
       if (error instanceof Error) {
         setMessage(
           error.message
@@ -563,11 +566,8 @@ export default function Home() {
           "Something went wrong."
         );
       }
-
     } finally {
-
       setUploading(false);
-
     }
   }
 
@@ -627,9 +627,7 @@ export default function Home() {
 
       setSimilarQuestionsData(null);
       setSimilarQuestionsMessage("");
-
     } catch (error) {
-
       if (error instanceof Error) {
         alert(
           error.message
@@ -639,13 +637,10 @@ export default function Home() {
           "Something went wrong."
         );
       }
-
     } finally {
-
       setDeletingPaperId(
         null
       );
-
     }
   }
 
@@ -730,9 +725,7 @@ export default function Home() {
           "No sufficiently relevant questions found for these filters."
         );
       }
-
     } catch (error) {
-
       if (error instanceof Error) {
         setSearchMessage(
           error.message
@@ -742,11 +735,8 @@ export default function Home() {
           "Something went wrong."
         );
       }
-
     } finally {
-
       setSearching(false);
-
     }
   }
 
@@ -818,7 +808,6 @@ export default function Home() {
         await similarResponse.json();
 
       if (similarResponse.ok) {
-
         setSimilarQuestionsData(
           similarData
         );
@@ -831,18 +820,13 @@ export default function Home() {
             "No strongly similar questions were found across different exam years."
           );
         }
-
       } else {
-
         setSimilarQuestionsMessage(
           similarData.detail ||
           "Could not analyse similar past questions."
         );
-
       }
-
     } catch (error) {
-
       if (error instanceof Error) {
         setTrendMessage(
           error.message
@@ -852,11 +836,8 @@ export default function Home() {
           "Something went wrong."
         );
       }
-
     } finally {
-
       setLoadingTrends(false);
-
     }
   }
 
@@ -885,69 +866,197 @@ export default function Home() {
   // =========================================================
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
+    <main className="min-h-screen bg-zinc-950 text-white selection:bg-white selection:text-black">
 
-      <div className="mx-auto max-w-5xl px-6 py-20">
+      {/* =====================================================
+          BACKGROUND
+      ===================================================== */}
+
+      <div className="pointer-events-none fixed inset-x-0 top-0 -z-0 h-[650px] bg-[radial-gradient(circle_at_top,rgba(63,63,70,0.22),transparent_55%)]" />
+
+      <div className="relative z-10 mx-auto max-w-6xl px-5 py-10 sm:px-6 sm:py-16 lg:px-8">
 
         {/* =====================================================
-            HEADER
+            TOP BAR
         ===================================================== */}
 
-        <div className="mb-12">
+        <div className="mb-16 flex items-center justify-between gap-6">
 
-          <p className="mb-3 text-sm font-medium tracking-wide text-zinc-500">
-            EXAM SEARCH
-          </p>
+          <div className="flex items-center gap-3">
 
-          <h1 className="max-w-4xl text-5xl font-semibold tracking-tight">
-            Search past papers and discover recurring exam topics.
-          </h1>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 font-semibold">
+              ES
+            </div>
 
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-zinc-400">
-            Search semantically similar questions across previous
-            exams or analyse which topics repeatedly appear across
-            different years.
-          </p>
+            <div>
+              <p className="font-semibold tracking-tight">
+                Exam Search
+              </p>
+
+              <p className="text-xs text-zinc-500">
+                Semantic past-paper analysis
+              </p>
+            </div>
+
+          </div>
+
+          <div className="hidden items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 sm:flex">
+
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+
+            <span className="text-xs font-medium text-zinc-400">
+              Live portfolio project
+            </span>
+
+          </div>
 
         </div>
 
         {/* =====================================================
-            SEARCH / TRENDS NAVIGATION
+            HERO
         ===================================================== */}
 
-        <div className="mb-6 inline-flex rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+        <section className="mb-14 border-b border-zinc-800 pb-14">
 
-          <button
-            onClick={() =>
-              setMainView(
-                "search"
-              )
-            }
-            className={`rounded-lg px-5 py-2.5 text-sm font-medium transition ${
-              mainView === "search"
-                ? "bg-white text-black"
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            Search
-          </button>
+          <div className="max-w-4xl">
 
-          <button
-            onClick={() =>
-              setMainView(
-                "trends"
-              )
-            }
-            className={`rounded-lg px-5 py-2.5 text-sm font-medium transition ${
-              mainView === "trends"
-                ? "bg-white text-black"
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            Trends
-          </button>
+            <div className="mb-5 flex flex-wrap gap-2">
 
-        </div>
+              <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-400">
+                NLP
+              </span>
+
+              <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-400">
+                Semantic search
+              </span>
+
+              <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-400">
+                Cross-year analysis
+              </span>
+
+              <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-400">
+                Source PDFs
+              </span>
+
+            </div>
+
+            <h1 className="max-w-4xl text-4xl font-semibold leading-tight tracking-[-0.03em] sm:text-5xl lg:text-6xl">
+              Find the questions that matter across years of past papers.
+            </h1>
+
+            <p className="mt-6 max-w-3xl text-base leading-8 text-zinc-400 sm:text-lg">
+              Search university exam questions by meaning rather than
+              exact wording, uncover recurring topics, and identify
+              questions that reappear in different forms across years.
+            </p>
+
+          </div>
+
+          <div className="mt-10 grid gap-3 sm:grid-cols-3">
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+
+              <p className="text-2xl font-semibold">
+                {loadingPapers
+                  ? "—"
+                  : papers.length}
+              </p>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Past papers indexed
+              </p>
+
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+
+              <p className="text-2xl font-semibold">
+                {loadingPapers
+                  ? "—"
+                  : availableModules.length}
+              </p>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Modules available
+              </p>
+
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+
+              <p className="text-2xl font-semibold">
+                {loadingPapers
+                  ? "—"
+                  : indexedYears.length}
+              </p>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Exam years represented
+              </p>
+
+            </div>
+
+          </div>
+
+        </section>
+
+        {/* =====================================================
+            PRODUCT NAVIGATION
+        ===================================================== */}
+
+        <section className="mb-8">
+
+          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+
+            <div>
+
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-600">
+                Explore
+              </p>
+
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                Search and analyse past papers
+              </h2>
+
+            </div>
+
+            <div className="inline-flex self-start rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+
+              <button
+                onClick={() =>
+                  setMainView(
+                    "search"
+                  )
+                }
+                className={`rounded-lg px-5 py-2.5 text-sm font-medium transition ${
+                  mainView === "search"
+                    ? "bg-white text-black shadow-sm"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Search
+              </button>
+
+              <button
+                onClick={() =>
+                  setMainView(
+                    "trends"
+                  )
+                }
+                className={`rounded-lg px-5 py-2.5 text-sm font-medium transition ${
+                  mainView === "trends"
+                    ? "bg-white text-black shadow-sm"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Trends
+              </button>
+
+            </div>
+
+          </div>
+
+        </section>
 
         {/* =====================================================
             SEARCH
@@ -955,359 +1064,431 @@ export default function Home() {
 
         {mainView === "search" && (
 
-          <section className="mb-16 rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+          <section className="mb-20 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/80 shadow-2xl shadow-black/20">
 
-            <p className="mb-2 text-sm font-medium text-zinc-500">
-              SEMANTIC SEARCH
-            </p>
+            <div className="border-b border-zinc-800 px-6 py-7 sm:px-8">
 
-            <h2 className="text-2xl font-semibold">
-              Search past-paper questions
-            </h2>
+              <div className="flex items-start justify-between gap-6">
 
-            <p className="mt-2 text-sm leading-6 text-zinc-500">
-              Search combines semantic retrieval with keyword
-              matching to rank relevant past-paper questions.
-            </p>
+                <div>
 
-            <div className="mt-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                    Semantic Search
+                  </p>
 
-              <label className="mb-2 block text-sm text-zinc-400">
-                Module
-              </label>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                    Find similar past-paper questions
+                  </h2>
 
-              <select
-                value={
-                  selectedModule
-                }
-                onChange={(
-                  event
-                ) => {
-
-                  setSelectedModule(
-                    event.target.value
-                  );
-
-                  setSelectedYear(
-                    ""
-                  );
-
-                  setSelectedExam(
-                    ""
-                  );
-
-                  setSearchResults(
-                    []
-                  );
-
-                  setSearchMessage(
-                    ""
-                  );
-                }}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-zinc-500"
-              >
-
-                <option value="">
-                  Select a module
-                </option>
-
-                {availableModules.map(
-                  (
-                    moduleName
-                  ) => (
-
-                    <option
-                      key={
-                        moduleName
-                      }
-                      value={
-                        moduleName
-                      }
-                    >
-                      {moduleName}
-                    </option>
-
-                  )
-                )}
-
-              </select>
-
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-
-              <div>
-
-                <label className="mb-2 block text-sm text-zinc-400">
-                  Year
-                </label>
-
-                <select
-                  value={
-                    selectedYear
-                  }
-                  onChange={(
-                    event
-                  ) => {
-
-                    setSelectedYear(
-                      event.target.value
-                    );
-
-                    setSelectedExam(
-                      ""
-                    );
-
-                    setSearchResults(
-                      []
-                    );
-
-                    setSearchMessage(
-                      ""
-                    );
-                  }}
-                  disabled={
-                    !selectedModule
-                  }
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-zinc-500 disabled:opacity-40"
-                >
-
-                  <option value="">
-                    All years
-                  </option>
-
-                  {availableYears.map(
-                    (
-                      yearValue
-                    ) => (
-
-                      <option
-                        key={
-                          yearValue
-                        }
-                        value={
-                          yearValue
-                        }
-                      >
-                        {yearValue}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </div>
-
-              <div>
-
-                <label className="mb-2 block text-sm text-zinc-400">
-                  Exam
-                </label>
-
-                <select
-                  value={
-                    selectedExam
-                  }
-                  onChange={(
-                    event
-                  ) => {
-
-                    setSelectedExam(
-                      event.target.value
-                    );
-
-                    setSearchResults(
-                      []
-                    );
-
-                    setSearchMessage(
-                      ""
-                    );
-                  }}
-                  disabled={
-                    !selectedModule
-                  }
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-zinc-500 disabled:opacity-40"
-                >
-
-                  <option value="">
-                    All exams
-                  </option>
-
-                  {availableExams.map(
-                    (
-                      examName
-                    ) => (
-
-                      <option
-                        key={
-                          examName
-                        }
-                        value={
-                          examName
-                        }
-                      >
-                        {examName}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </div>
-
-            </div>
-
-            <textarea
-              value={
-                searchQuery
-              }
-              onChange={(
-                event
-              ) =>
-                setSearchQuery(
-                  event.target.value
-                )
-              }
-              placeholder="e.g. How does a protocol determine message boundaries while managing persistent connections?"
-              className="mt-6 h-36 w-full resize-none rounded-xl border border-zinc-700 bg-zinc-950 p-4 leading-7 text-white outline-none transition focus:border-zinc-500"
-            />
-
-            <button
-              onClick={
-                handleSearch
-              }
-              disabled={
-                searching ||
-                !searchQuery.trim() ||
-                !selectedModule
-              }
-              className="mt-4 rounded-lg bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {searching
-                ? "Searching..."
-                : "Find similar questions"}
-            </button>
-
-            {searchMessage && (
-
-              <p className="mt-4 text-sm text-zinc-400">
-                {searchMessage}
-              </p>
-
-            )}
-
-            {searchResults.length > 0 && (
-
-              <div className="mt-8">
-
-                <div className="mb-4 flex items-center justify-between">
-
-                  <p className="text-sm text-zinc-500">
-                    {searchResults.length}{" "}
-                    {searchResults.length === 1
-                      ? "result"
-                      : "results"}
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
+                    Paste a question or describe a concept. Results are
+                    ranked using semantic similarity together with
+                    keyword matching.
                   </p>
 
                 </div>
 
-                <div className="space-y-4">
+                <div className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-lg sm:flex">
+                  ⌕
+                </div>
 
-                  {searchResults.map(
+              </div>
+
+            </div>
+
+            <div className="p-6 sm:p-8">
+
+              <div>
+
+                <label className="mb-2 block text-sm font-medium text-zinc-300">
+                  Module
+                </label>
+
+                <select
+                  value={
+                    selectedModule
+                  }
+                  onChange={(
+                    event
+                  ) => {
+
+                    setSelectedModule(
+                      event.target.value
+                    );
+
+                    setSelectedYear(
+                      ""
+                    );
+
+                    setSelectedExam(
+                      ""
+                    );
+
+                    setSearchResults(
+                      []
+                    );
+
+                    setSearchMessage(
+                      ""
+                    );
+                  }}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3.5 text-white outline-none transition focus:border-zinc-500 focus:ring-1 focus:ring-zinc-700"
+                >
+
+                  <option value="">
+                    Select a module
+                  </option>
+
+                  {availableModules.map(
                     (
-                      result,
-                      index
+                      moduleName
+                    ) => (
+
+                      <option
+                        key={
+                          moduleName
+                        }
+                        value={
+                          moduleName
+                        }
+                      >
+                        {moduleName}
+                      </option>
+
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-zinc-300">
+                    Year
+                  </label>
+
+                  <select
+                    value={
+                      selectedYear
+                    }
+                    onChange={(
+                      event
                     ) => {
 
-                      const relevance =
-                        Math.max(
-                          0,
-                          Math.min(
-                            100,
-                            Math.round(
-                              result.score *
-                              100
-                            )
-                          )
-                        );
-
-                      return (
-
-                        <article
-                          key={
-                            result.id
-                          }
-                          className="rounded-xl border border-zinc-800 bg-zinc-950 p-6"
-                        >
-
-                          <div className="flex flex-wrap items-center gap-2">
-
-                            <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                              #{index + 1}
-                            </span>
-
-                            <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                              {relevance}% relevance
-                            </span>
-
-                            {result.page_number && (
-
-                              <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                                Page{" "}
-                                {result.page_number}
-                              </span>
-
-                            )}
-
-                          </div>
-
-                          <h3 className="mt-4 text-lg font-semibold">
-                            {result.module} ·{" "}
-                            {result.year} ·{" "}
-                            {result.exam}
-                          </h3>
-
-                          <p className="mt-1 text-sm text-zinc-400">
-                            Question{" "}
-                            {result.question_number}
-                          </p>
-
-                          <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
-                            {result.text}
-                          </p>
-
-                          <div className="mt-6">
-
-                            <a
-                              href={
-                                getPaperUrl(
-                                  result.paper_id,
-                                  result.page_number
-                                )
-                              }
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
-                            >
-                              Open source paper
-                            </a>
-
-                          </div>
-
-                        </article>
-
+                      setSelectedYear(
+                        event.target.value
                       );
+
+                      setSelectedExam(
+                        ""
+                      );
+
+                      setSearchResults(
+                        []
+                      );
+
+                      setSearchMessage(
+                        ""
+                      );
+                    }}
+                    disabled={
+                      !selectedModule
                     }
-                  )}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3.5 text-white outline-none transition focus:border-zinc-500 focus:ring-1 focus:ring-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+
+                    <option value="">
+                      All years
+                    </option>
+
+                    {availableYears.map(
+                      (
+                        yearValue
+                      ) => (
+
+                        <option
+                          key={
+                            yearValue
+                          }
+                          value={
+                            yearValue
+                          }
+                        >
+                          {yearValue}
+                        </option>
+
+                      )
+                    )}
+
+                  </select>
+
+                </div>
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-medium text-zinc-300">
+                    Exam
+                  </label>
+
+                  <select
+                    value={
+                      selectedExam
+                    }
+                    onChange={(
+                      event
+                    ) => {
+
+                      setSelectedExam(
+                        event.target.value
+                      );
+
+                      setSearchResults(
+                        []
+                      );
+
+                      setSearchMessage(
+                        ""
+                      );
+                    }}
+                    disabled={
+                      !selectedModule
+                    }
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3.5 text-white outline-none transition focus:border-zinc-500 focus:ring-1 focus:ring-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+
+                    <option value="">
+                      All exams
+                    </option>
+
+                    {availableExams.map(
+                      (
+                        examName
+                      ) => (
+
+                        <option
+                          key={
+                            examName
+                          }
+                          value={
+                            examName
+                          }
+                        >
+                          {examName}
+                        </option>
+
+                      )
+                    )}
+
+                  </select>
 
                 </div>
 
               </div>
 
-            )}
+              <div className="mt-6">
+
+                <div className="mb-2 flex items-center justify-between gap-4">
+
+                  <label className="text-sm font-medium text-zinc-300">
+                    Question or concept
+                  </label>
+
+                  <span className="text-xs text-zinc-600">
+                    Search by meaning
+                  </span>
+
+                </div>
+
+                <textarea
+                  value={
+                    searchQuery
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setSearchQuery(
+                      event.target.value
+                    )
+                  }
+                  placeholder="e.g. How does a protocol determine message boundaries while managing persistent connections?"
+                  className="h-36 w-full resize-none rounded-xl border border-zinc-700 bg-zinc-950 p-4 leading-7 text-white outline-none transition placeholder:text-zinc-700 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-700"
+                />
+
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+
+                <button
+                  onClick={
+                    handleSearch
+                  }
+                  disabled={
+                    searching ||
+                    !searchQuery.trim() ||
+                    !selectedModule
+                  }
+                  className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {searching
+                    ? "Searching..."
+                    : "Find similar questions"}
+                </button>
+
+                <p className="text-xs text-zinc-600">
+                  Returns the ten strongest relevant matches.
+                </p>
+
+              </div>
+
+              {searchMessage && (
+
+                <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3">
+
+                  <p className="text-sm text-zinc-400">
+                    {searchMessage}
+                  </p>
+
+                </div>
+
+              )}
+
+              {searchResults.length > 0 && (
+
+                <div className="mt-10 border-t border-zinc-800 pt-8">
+
+                  <div className="mb-5 flex items-end justify-between">
+
+                    <div>
+
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-600">
+                        Results
+                      </p>
+
+                      <h3 className="mt-2 text-xl font-semibold">
+                        Most relevant questions
+                      </h3>
+
+                    </div>
+
+                    <span className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-500">
+                      {searchResults.length}{" "}
+                      {searchResults.length === 1
+                        ? "match"
+                        : "matches"}
+                    </span>
+
+                  </div>
+
+                  <div className="space-y-4">
+
+                    {searchResults.map(
+                      (
+                        result,
+                        index
+                      ) => {
+
+                        const relevance =
+                          Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              Math.round(
+                                result.score *
+                                100
+                              )
+                            )
+                          );
+
+                        return (
+
+                          <article
+                            key={
+                              result.id
+                            }
+                            className="group rounded-2xl border border-zinc-800 bg-zinc-950 p-6 transition hover:border-zinc-700"
+                          >
+
+                            <div className="flex flex-wrap items-center gap-2">
+
+                              <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-400">
+                                #{index + 1}
+                              </span>
+
+                              <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-300">
+                                {relevance}% relevance
+                              </span>
+
+                              {result.page_number && (
+
+                                <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-500">
+                                  Page{" "}
+                                  {result.page_number}
+                                </span>
+
+                              )}
+
+                            </div>
+
+                            <div className="mt-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+
+                              <div>
+
+                                <h3 className="text-lg font-semibold tracking-tight">
+                                  {result.module} ·{" "}
+                                  {result.year} ·{" "}
+                                  {result.exam}
+                                </h3>
+
+                                <p className="mt-1 text-sm text-zinc-500">
+                                  Question{" "}
+                                  {result.question_number}
+                                </p>
+
+                              </div>
+
+                            </div>
+
+                            <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                              {result.text}
+                            </p>
+
+                            <div className="mt-6">
+
+                              <a
+                                href={
+                                  getPaperUrl(
+                                    result.paper_id,
+                                    result.page_number
+                                  )
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
+                              >
+                                Open source paper
+                                <span aria-hidden="true">
+                                  ↗
+                                </span>
+                              </a>
+
+                            </div>
+
+                          </article>
+
+                        );
+                      }
+                    )}
+
+                  </div>
+
+                </div>
+
+              )}
+
+            </div>
 
           </section>
 
@@ -1319,1204 +1500,1272 @@ export default function Home() {
 
         {mainView === "trends" && (
 
-          <section className="mb-16 rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+          <section className="mb-20 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/80 shadow-2xl shadow-black/20">
 
-            <p className="mb-2 text-sm font-medium text-zinc-500">
-              EXAM TRENDS
-            </p>
+            <div className="border-b border-zinc-800 px-6 py-7 sm:px-8">
 
-            <h2 className="text-2xl font-semibold">
-              Recurring topics
-            </h2>
+              <div className="flex items-start justify-between gap-6">
 
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
-              Analyse recurring topics and identify strongly similar
-              questions that appear across different exam years.
-            </p>
+                <div>
 
-            <div className="mt-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                    Exam Trends
+                  </p>
 
-              <label className="mb-2 block text-sm text-zinc-400">
-                Module
-              </label>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                    Discover patterns across exam years
+                  </h2>
 
-              <select
-                value={
-                  trendModule
-                }
-                onChange={(
-                  event
-                ) => {
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
+                    Analyse recurring topics and identify strongly
+                    similar questions that appear across different
+                    exam years.
+                  </p>
 
-                  setTrendModule(
-                    event.target.value
-                  );
+                </div>
 
-                  setTrendData(
-                    null
-                  );
+                <div className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-lg sm:flex">
+                  ↗
+                </div>
 
-                  setTrendMessage(
-                    ""
-                  );
-
-                  setOpenTopics(
-                    []
-                  );
-
-                  setSelectedMatrixCell(
-                    null
-                  );
-
-                  setSimilarQuestionsData(
-                    null
-                  );
-
-                  setSimilarQuestionsMessage(
-                    ""
-                  );
-                }}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none transition focus:border-zinc-500"
-              >
-
-                <option value="">
-                  Select a module
-                </option>
-
-                {availableModules.map(
-                  (
-                    moduleName
-                  ) => (
-
-                    <option
-                      key={
-                        moduleName
-                      }
-                      value={
-                        moduleName
-                      }
-                    >
-                      {moduleName}
-                    </option>
-
-                  )
-                )}
-
-              </select>
+              </div>
 
             </div>
 
-            <button
-              onClick={
-                handleLoadTrends
-              }
-              disabled={
-                loadingTrends ||
-                !trendModule
-              }
-              className="mt-4 rounded-lg bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {loadingTrends
-                ? "Analysing..."
-                : "Analyse trends"}
-            </button>
+            <div className="p-6 sm:p-8">
 
-            {trendMessage && (
+              <div>
 
-              <p className="mt-4 text-sm text-zinc-400">
-                {trendMessage}
-              </p>
+                <label className="mb-2 block text-sm font-medium text-zinc-300">
+                  Module
+                </label>
 
-            )}
+                <select
+                  value={
+                    trendModule
+                  }
+                  onChange={(
+                    event
+                  ) => {
 
-            {trendData && (
+                    setTrendModule(
+                      event.target.value
+                    );
 
-              <div className="mt-8">
+                    setTrendData(
+                      null
+                    );
 
-                {/* =================================================
-                    SUMMARY
-                ================================================= */}
+                    setTrendMessage(
+                      ""
+                    );
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    setOpenTopics(
+                      []
+                    );
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+                    setSelectedMatrixCell(
+                      null
+                    );
 
-                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                      Module
-                    </p>
+                    setSimilarQuestionsData(
+                      null
+                    );
 
-                    <p className="mt-2 text-xl font-semibold">
-                      {trendData.module}
-                    </p>
+                    setSimilarQuestionsMessage(
+                      ""
+                    );
+                  }}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3.5 text-white outline-none transition focus:border-zinc-500 focus:ring-1 focus:ring-zinc-700"
+                >
 
-                  </div>
+                  <option value="">
+                    Select a module
+                  </option>
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+                  {availableModules.map(
+                    (
+                      moduleName
+                    ) => (
 
-                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                      Years analysed
-                    </p>
+                      <option
+                        key={
+                          moduleName
+                        }
+                        value={
+                          moduleName
+                        }
+                      >
+                        {moduleName}
+                      </option>
 
-                    <p className="mt-2 text-xl font-semibold">
-                      {trendData.years_analysed}
-                    </p>
+                    )
+                  )}
 
-                  </div>
+                </select>
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+              </div>
 
-                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                      Questions
-                    </p>
+              <button
+                onClick={
+                  handleLoadTrends
+                }
+                disabled={
+                  loadingTrends ||
+                  !trendModule
+                }
+                className="mt-4 rounded-xl bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {loadingTrends
+                  ? "Analysing..."
+                  : "Analyse trends"}
+              </button>
 
-                    <p className="mt-2 text-xl font-semibold">
-                      {trendData.questions_analysed}
-                    </p>
+              {trendMessage && (
 
-                  </div>
+                <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3">
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
-
-                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                      Recurring topics
-                    </p>
-
-                    <p className="mt-2 text-xl font-semibold">
-                      {trendData.topic_count}
-                    </p>
-
-                  </div>
+                  <p className="text-sm text-zinc-400">
+                    {trendMessage}
+                  </p>
 
                 </div>
 
-                {/* =================================================
-                    YEAR BADGES
-                ================================================= */}
+              )}
 
-                {trendData.papers_years.length > 0 && (
+              {trendData && (
 
-                  <div className="mt-6 flex flex-wrap items-center gap-2">
+                <div className="mt-10 border-t border-zinc-800 pt-8">
 
-                    <span className="mr-2 text-sm text-zinc-500">
-                      Exam years
-                    </span>
+                  {/* =================================================
+                      SUMMARY
+                  ================================================= */}
 
-                    {trendData.papers_years.map(
-                      (
-                        yearValue
-                      ) => (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
-                        <span
-                          key={
-                            yearValue
-                          }
-                          className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300"
-                        >
-                          {yearValue}
-                        </span>
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
 
-                      )
-                    )}
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-600">
+                        Module
+                      </p>
 
-                  </div>
-
-                )}
-
-                {/* =================================================
-                    SIMILAR PAST QUESTIONS
-                ================================================= */}
-
-                <div className="mt-10">
-
-                  <div className="mb-5">
-
-                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-
-                      <div>
-
-                        <p className="text-sm font-medium text-zinc-500">
-                          SIMILAR PAST QUESTIONS
-                        </p>
-
-                        <h3 className="mt-2 text-xl font-semibold">
-                          Possible repeated or reworded questions
-                        </h3>
-
-                        <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
-                          Strong semantic matches found between questions
-                          from different exam years. These indicate similar
-                          question patterns, not necessarily exact repeats.
-                        </p>
-
-                      </div>
-
-                      {similarQuestionsData && (
-
-                        <span className="shrink-0 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-400">
-                          {similarQuestionsData.match_count}{" "}
-                          {similarQuestionsData.match_count === 1
-                            ? "match"
-                            : "matches"}
-                        </span>
-
-                      )}
-
-                    </div>
-
-                  </div>
-
-                  {similarQuestionsMessage && (
-
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-4">
-
-                      <p className="text-sm text-zinc-400">
-                        {similarQuestionsMessage}
+                      <p className="mt-3 text-xl font-semibold">
+                        {trendData.module}
                       </p>
 
                     </div>
 
-                  )}
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
 
-                  {similarQuestionsData &&
-                   similarQuestionsData.matches.length > 0 && (
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-600">
+                        Years analysed
+                      </p>
 
-                    <div className="space-y-5">
+                      <p className="mt-3 text-xl font-semibold">
+                        {trendData.years_analysed}
+                      </p>
 
-                      {similarQuestionsData.matches.map(
+                    </div>
+
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-600">
+                        Questions
+                      </p>
+
+                      <p className="mt-3 text-xl font-semibold">
+                        {trendData.questions_analysed}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-600">
+                        Recurring topics
+                      </p>
+
+                      <p className="mt-3 text-xl font-semibold">
+                        {trendData.topic_count}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  {/* =================================================
+                      YEAR BADGES
+                  ================================================= */}
+
+                  {trendData.papers_years.length > 0 && (
+
+                    <div className="mt-6 flex flex-wrap items-center gap-2">
+
+                      <span className="mr-2 text-sm text-zinc-500">
+                        Exam years
+                      </span>
+
+                      {trendData.papers_years.map(
                         (
-                          match,
-                          index
-                        ) => {
+                          yearValue
+                        ) => (
 
-                          const similarityPercent =
-                            Math.max(
-                              0,
-                              Math.min(
-                                100,
-                                Math.round(
-                                  match.similarity *
-                                  100
-                                )
-                              )
-                            );
+                          <span
+                            key={
+                              yearValue
+                            }
+                            className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300"
+                          >
+                            {yearValue}
+                          </span>
 
-                          return (
-
-                            <article
-                              key={
-                                match.id
-                              }
-                              className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950"
-                            >
-
-                              {/* Match heading */}
-
-                              <div className="flex flex-col justify-between gap-4 border-b border-zinc-800 bg-zinc-900/60 px-6 py-5 sm:flex-row sm:items-center">
-
-                                <div>
-
-                                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                                    Match {index + 1}
-                                  </p>
-
-                                  <p className="mt-1 text-sm text-zinc-400">
-                                    Questions from different exam years
-                                  </p>
-
-                                </div>
-
-                                <div className="shrink-0 rounded-full border border-zinc-700 bg-zinc-950 px-4 py-2">
-
-                                  <span className="text-sm font-semibold text-zinc-200">
-                                    {similarityPercent}%
-                                  </span>
-
-                                  <span className="ml-1 text-xs text-zinc-500">
-                                    similar
-                                  </span>
-
-                                </div>
-
-                              </div>
-
-                              {/* Pair */}
-
-                              <div className="grid md:grid-cols-2">
-
-                                {/* Newer / first question */}
-
-                                <div className="border-b border-zinc-800 p-6 md:border-b-0 md:border-r">
-
-                                  <div className="flex flex-wrap items-center gap-2">
-
-                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                      {match.question.year}
-                                    </span>
-
-                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                      {match.question.exam}
-                                    </span>
-
-                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                      Question{" "}
-                                      {match.question.question_number}
-                                    </span>
-
-                                    {match.question.page_number && (
-
-                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-500">
-                                        Page{" "}
-                                        {match.question.page_number}
-                                      </span>
-
-                                    )}
-
-                                  </div>
-
-                                  <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
-                                    {match.question.text}
-                                  </p>
-
-                                  <a
-                                    href={
-                                      getPaperUrl(
-                                        match.question.paper_id,
-                                        match.question.page_number
-                                      )
-                                    }
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-6 inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
-                                  >
-                                    Open {match.question.year} paper
-                                  </a>
-
-                                </div>
-
-                                {/* Older / similar question */}
-
-                                <div className="p-6">
-
-                                  <div className="flex flex-wrap items-center gap-2">
-
-                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                      {match.similar_question.year}
-                                    </span>
-
-                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                      {match.similar_question.exam}
-                                    </span>
-
-                                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                      Question{" "}
-                                      {match.similar_question.question_number}
-                                    </span>
-
-                                    {match.similar_question.page_number && (
-
-                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-500">
-                                        Page{" "}
-                                        {match.similar_question.page_number}
-                                      </span>
-
-                                    )}
-
-                                  </div>
-
-                                  <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
-                                    {match.similar_question.text}
-                                  </p>
-
-                                  <a
-                                    href={
-                                      getPaperUrl(
-                                        match.similar_question.paper_id,
-                                        match.similar_question.page_number
-                                      )
-                                    }
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-6 inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
-                                  >
-                                    Open {match.similar_question.year} paper
-                                  </a>
-
-                                </div>
-
-                              </div>
-
-                            </article>
-
-                          );
-                        }
+                        )
                       )}
 
                     </div>
 
                   )}
 
-                </div>
+                  {/* =================================================
+                      SIMILAR PAST QUESTIONS
+                  ================================================= */}
 
-                {/* =================================================
-                    TOPIC FREQUENCY MATRIX
-                ================================================= */}
-
-                {trendData.topics.length > 0 && (
-
-                  <div className="mt-10">
+                  <div className="mt-12">
 
                     <div className="mb-5">
 
-                      <p className="text-sm font-medium text-zinc-500">
-                        TOPIC FREQUENCY
-                      </p>
+                      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
 
-                      <h3 className="mt-2 text-xl font-semibold">
-                        Topic history by year
-                      </h3>
+                        <div>
 
-                      <p className="mt-2 text-sm leading-6 text-zinc-500">
-                        Each value shows how many questions from a recurring
-                        topic appeared in that exam year. Click a non-zero
-                        value to inspect those questions.
-                      </p>
-
-                    </div>
-
-                    <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950">
-
-                      <table className="w-full min-w-[650px] border-collapse">
-
-                        <thead>
-
-                          <tr className="border-b border-zinc-800">
-
-                            <th className="px-5 py-4 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">
-                              Topic
-                            </th>
-
-                            {trendData.papers_years.map(
-                              (
-                                yearValue
-                              ) => (
-
-                                <th
-                                  key={
-                                    yearValue
-                                  }
-                                  className="px-5 py-4 text-center text-xs font-medium uppercase tracking-wide text-zinc-500"
-                                >
-                                  {yearValue}
-                                </th>
-
-                              )
-                            )}
-
-                            <th className="px-5 py-4 text-center text-xs font-medium uppercase tracking-wide text-zinc-500">
-                              Total
-                            </th>
-
-                          </tr>
-
-                        </thead>
-
-                        <tbody>
-
-                          {trendData.topics.map(
-                            (
-                              topic
-                            ) => (
-
-                              <tr
-                                key={
-                                  topic.id
-                                }
-                                className="border-b border-zinc-800 last:border-b-0"
-                              >
-
-                                <td className="max-w-xs px-5 py-4">
-
-                                  <p className="font-medium leading-6 text-zinc-200">
-                                    {topic.topic}
-                                  </p>
-
-                                  <p className="mt-1 text-xs text-zinc-600">
-                                    {Math.round(
-                                      topic.cohesion *
-                                      100
-                                    )}% cohesion
-                                  </p>
-
-                                </td>
-
-                                {trendData.papers_years.map(
-                                  (
-                                    yearValue
-                                  ) => {
-
-                                    const count =
-                                      getTopicYearCount(
-                                        topic,
-                                        yearValue
-                                      );
-
-                                    const isSelected =
-                                      selectedMatrixCell?.topicId ===
-                                        topic.id &&
-                                      selectedMatrixCell.year ===
-                                        yearValue;
-
-                                    return (
-
-                                      <td
-                                        key={
-                                          yearValue
-                                        }
-                                        className="px-4 py-4 text-center"
-                                      >
-
-                                        {count > 0 ? (
-
-                                          <button
-                                            onClick={() =>
-                                              handleMatrixCellClick(
-                                                topic,
-                                                yearValue
-                                              )
-                                            }
-                                            className={`inline-flex h-10 min-w-10 items-center justify-center rounded-lg border px-3 text-sm font-semibold transition ${
-                                              isSelected
-                                                ? "border-white bg-white text-black"
-                                                : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800"
-                                            }`}
-                                          >
-                                            {count}
-                                          </button>
-
-                                        ) : (
-
-                                          <span className="text-sm text-zinc-700">
-                                            —
-                                          </span>
-
-                                        )}
-
-                                      </td>
-
-                                    );
-                                  }
-                                )}
-
-                                <td className="px-5 py-4 text-center font-semibold text-zinc-300">
-                                  {topic.question_count}
-                                </td>
-
-                              </tr>
-
-                            )
-                          )}
-
-                        </tbody>
-
-                      </table>
-
-                    </div>
-
-                  </div>
-
-                )}
-
-                {/* =================================================
-                    SELECTED MATRIX CELL QUESTIONS
-                ================================================= */}
-
-                {selectedMatrixCell &&
-                 selectedMatrixTopic && (
-
-                  <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950">
-
-                    <div className="flex flex-col justify-between gap-4 border-b border-zinc-800 bg-zinc-900/70 px-6 py-5 md:flex-row md:items-center">
-
-                      <div>
-
-                        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                          SELECTED YEAR
-                        </p>
-
-                        <h3 className="mt-2 text-lg font-semibold">
-                          {selectedMatrixTopic.topic}
-                        </h3>
-
-                        <p className="mt-1 text-sm text-zinc-400">
-                          {selectedMatrixCell.year} ·{" "}
-                          {selectedMatrixQuestions.length}{" "}
-                          {selectedMatrixQuestions.length === 1
-                            ? "question"
-                            : "questions"}
-                        </p>
-
-                      </div>
-
-                      <button
-                        onClick={() =>
-                          setSelectedMatrixCell(
-                            null
-                          )
-                        }
-                        className="self-start rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 transition hover:bg-zinc-800 hover:text-white md:self-auto"
-                      >
-                        Close
-                      </button>
-
-                    </div>
-
-                    {selectedMatrixQuestions.map(
-                      (
-                        question
-                      ) => (
-
-                        <div
-                          key={
-                            question.id
-                          }
-                          className="border-b border-zinc-800 px-6 py-6 last:border-b-0"
-                        >
-
-                          <div className="flex flex-wrap items-center gap-2">
-
-                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                              {question.year}
-                            </span>
-
-                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                              {question.exam}
-                            </span>
-
-                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                              Question{" "}
-                              {question.question_number}
-                            </span>
-
-                            {question.page_number && (
-
-                              <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-400">
-                                Page{" "}
-                                {question.page_number}
-                              </span>
-
-                            )}
-
-                          </div>
-
-                          <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
-                            {question.text}
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-600">
+                            Similar Past Questions
                           </p>
 
-                          <a
-                            href={
-                              getPaperUrl(
-                                question.paper_id,
-                                question.page_number
-                              )
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-5 inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
-                          >
-                            Open source paper
-                          </a>
+                          <h3 className="mt-2 text-xl font-semibold tracking-tight">
+                            Possible repeated or reworded questions
+                          </h3>
+
+                          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
+                            Strong semantic matches between questions
+                            from different exam years. These indicate
+                            similar question patterns rather than
+                            guaranteed exact repeats.
+                          </p>
 
                         </div>
 
-                      )
-                    )}
+                        {similarQuestionsData && (
 
-                  </div>
+                          <span className="shrink-0 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-400">
+                            {similarQuestionsData.match_count}{" "}
+                            {similarQuestionsData.match_count === 1
+                              ? "match"
+                              : "matches"}
+                          </span>
 
-                )}
+                        )}
 
-                {/* =================================================
-                    TOPIC CARDS
-                ================================================= */}
-
-                {trendData.topics.length > 0 && (
-
-                  <div className="mt-10">
-
-                    <div className="mb-5">
-
-                      <p className="text-sm font-medium text-zinc-500">
-                        TOPIC DETAILS
-                      </p>
-
-                      <h3 className="mt-2 text-xl font-semibold">
-                        Recurring topic breakdown
-                      </h3>
+                      </div>
 
                     </div>
 
-                    <div className="space-y-4">
+                    {similarQuestionsMessage && (
 
-                      {trendData.topics.map(
-                        (
-                          topic,
-                          index
-                        ) => {
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-4">
 
-                          const isOpen =
-                            openTopics.includes(
-                              topic.id
-                            );
+                        <p className="text-sm text-zinc-400">
+                          {similarQuestionsMessage}
+                        </p>
 
-                          const cohesionPercent =
-                            Math.round(
-                              topic.cohesion *
-                              100
-                            );
+                      </div>
 
-                          const maximumYearCount =
-                            getTopicMaximumYearCount(
-                              topic
-                            );
+                    )}
 
-                          return (
+                    {similarQuestionsData &&
+                     similarQuestionsData.matches.length > 0 && (
 
-                            <article
-                              key={
-                                topic.id
-                              }
-                              className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950"
-                            >
+                      <div className="space-y-5">
 
-                              {/* Topic header */}
+                        {similarQuestionsData.matches.map(
+                          (
+                            match,
+                            index
+                          ) => {
 
-                              <button
-                                onClick={() =>
-                                  toggleTopic(
-                                    topic.id
+                            const similarityPercent =
+                              Math.max(
+                                0,
+                                Math.min(
+                                  100,
+                                  Math.round(
+                                    match.similarity *
+                                    100
                                   )
+                                )
+                              );
+
+                            return (
+
+                              <article
+                                key={
+                                  match.id
                                 }
-                                className="w-full px-6 py-6 text-left transition hover:bg-zinc-900"
+                                className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950"
                               >
 
-                                <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
+                                <div className="flex flex-col justify-between gap-4 border-b border-zinc-800 bg-zinc-900/60 px-6 py-5 sm:flex-row sm:items-center">
 
-                                  <div className="min-w-0">
+                                  <div>
 
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-600">
+                                      Match {index + 1}
+                                    </p>
 
-                                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">
-                                        Topic{" "}
-                                        {index + 1}
-                                      </span>
-
-                                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                                        {topic.question_count}{" "}
-                                        {topic.question_count === 1
-                                          ? "question"
-                                          : "questions"}
-                                      </span>
-
-                                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                                        {topic.appearance_count}{" "}
-                                        {topic.appearance_count === 1
-                                          ? "year"
-                                          : "years"}
-                                      </span>
-
-                                    </div>
-
-                                    <h3 className="mt-4 text-xl font-semibold leading-8">
-                                      {topic.topic}
-                                    </h3>
-
-                                    <div className="mt-4 flex flex-wrap gap-2">
-
-                                      {topic.years.map(
-                                        (
-                                          yearValue
-                                        ) => (
-
-                                          <span
-                                            key={
-                                              yearValue
-                                            }
-                                            className="rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400"
-                                          >
-                                            {yearValue}
-                                          </span>
-
-                                        )
-                                      )}
-
-                                    </div>
+                                    <p className="mt-1 text-sm text-zinc-400">
+                                      Questions from different exam years
+                                    </p>
 
                                   </div>
 
-                                  <div className="flex shrink-0 items-center gap-4">
+                                  <div className="shrink-0 rounded-full border border-zinc-700 bg-zinc-950 px-4 py-2">
 
-                                    <div className="text-right">
+                                    <span className="text-sm font-semibold text-zinc-200">
+                                      {similarityPercent}%
+                                    </span>
 
-                                      <p className="text-xs uppercase tracking-wide text-zinc-600">
-                                        Cohesion
-                                      </p>
-
-                                      <p className="mt-1 font-medium text-zinc-300">
-                                        {cohesionPercent}%
-                                      </p>
-
-                                    </div>
-
-                                    <span className="text-2xl text-zinc-500">
-                                      {isOpen
-                                        ? "−"
-                                        : "+"}
+                                    <span className="ml-1 text-xs text-zinc-500">
+                                      similar
                                     </span>
 
                                   </div>
 
                                 </div>
 
-                              </button>
+                                <div className="grid md:grid-cols-2">
 
-                              {/* Expanded topic */}
+                                  <div className="border-b border-zinc-800 p-6 md:border-b-0 md:border-r">
 
-                              {isOpen && (
+                                    <div className="flex flex-wrap items-center gap-2">
 
-                                <div className="border-t border-zinc-800">
+                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                        {match.question.year}
+                                      </span>
 
-                                  {/* Frequency bars */}
+                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                        {match.question.exam}
+                                      </span>
 
-                                  <div className="border-b border-zinc-800 bg-zinc-900/40 px-6 py-6">
+                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                        Question{" "}
+                                        {match.question.question_number}
+                                      </span>
 
-                                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                                      Frequency by year
-                                    </p>
+                                      {match.question.page_number && (
 
-                                    <div className="mt-5 space-y-4">
+                                        <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-500">
+                                          Page{" "}
+                                          {match.question.page_number}
+                                        </span>
 
-                                      {trendData.papers_years.map(
-                                        (
-                                          yearValue
-                                        ) => {
-
-                                          const count =
-                                            getTopicYearCount(
-                                              topic,
-                                              yearValue
-                                            );
-
-                                          const widthPercentage =
-                                            count === 0
-                                              ? 0
-                                              : Math.max(
-                                                  10,
-                                                  (
-                                                    count /
-                                                    maximumYearCount
-                                                  ) *
-                                                    100
-                                                );
-
-                                          return (
-
-                                            <div
-                                              key={
-                                                yearValue
-                                              }
-                                            >
-
-                                              <div className="mb-2 flex items-center justify-between gap-4">
-
-                                                <span className="text-sm font-medium text-zinc-300">
-                                                  {yearValue}
-                                                </span>
-
-                                                <span className="text-sm text-zinc-500">
-                                                  {count}{" "}
-                                                  {count === 1
-                                                    ? "question"
-                                                    : "questions"}
-                                                </span>
-
-                                              </div>
-
-                                              <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-
-                                                {count > 0 && (
-
-                                                  <div
-                                                    className="h-full rounded-full bg-zinc-300 transition-all"
-                                                    style={{
-                                                      width:
-                                                        `${widthPercentage}%`,
-                                                    }}
-                                                  />
-
-                                                )}
-
-                                              </div>
-
-                                            </div>
-
-                                          );
-                                        }
                                       )}
 
                                     </div>
 
-                                  </div>
-
-                                  {/* Questions heading */}
-
-                                  <div className="border-b border-zinc-800 bg-zinc-900/50 px-6 py-4">
-
-                                    <p className="text-sm text-zinc-500">
-                                      Past-paper questions grouped into this recurring topic
+                                    <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                                      {match.question.text}
                                     </p>
 
+                                    <a
+                                      href={
+                                        getPaperUrl(
+                                          match.question.paper_id,
+                                          match.question.page_number
+                                        )
+                                      }
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="mt-6 inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+                                    >
+                                      Open {match.question.year} paper
+                                      <span aria-hidden="true">
+                                        ↗
+                                      </span>
+                                    </a>
+
                                   </div>
 
-                                  {/* Questions */}
+                                  <div className="p-6">
 
-                                  {topic.questions.map(
+                                    <div className="flex flex-wrap items-center gap-2">
+
+                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                        {match.similar_question.year}
+                                      </span>
+
+                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                        {match.similar_question.exam}
+                                      </span>
+
+                                      <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                        Question{" "}
+                                        {match.similar_question.question_number}
+                                      </span>
+
+                                      {match.similar_question.page_number && (
+
+                                        <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-500">
+                                          Page{" "}
+                                          {match.similar_question.page_number}
+                                        </span>
+
+                                      )}
+
+                                    </div>
+
+                                    <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                                      {match.similar_question.text}
+                                    </p>
+
+                                    <a
+                                      href={
+                                        getPaperUrl(
+                                          match.similar_question.paper_id,
+                                          match.similar_question.page_number
+                                        )
+                                      }
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="mt-6 inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+                                    >
+                                      Open {match.similar_question.year} paper
+                                      <span aria-hidden="true">
+                                        ↗
+                                      </span>
+                                    </a>
+
+                                  </div>
+
+                                </div>
+
+                              </article>
+
+                            );
+                          }
+                        )}
+
+                      </div>
+
+                    )}
+
+                  </div>
+
+                  {/* =================================================
+                      TOPIC FREQUENCY MATRIX
+                  ================================================= */}
+
+                  {trendData.topics.length > 0 && (
+
+                    <div className="mt-12">
+
+                      <div className="mb-5">
+
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-600">
+                          Topic Frequency
+                        </p>
+
+                        <h3 className="mt-2 text-xl font-semibold tracking-tight">
+                          Topic history by year
+                        </h3>
+
+                        <p className="mt-2 text-sm leading-6 text-zinc-500">
+                          Each value shows how many questions from a
+                          recurring topic appeared in that exam year.
+                          Click a non-zero value to inspect those
+                          questions.
+                        </p>
+
+                      </div>
+
+                      <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950">
+
+                        <table className="w-full min-w-[650px] border-collapse">
+
+                          <thead>
+
+                            <tr className="border-b border-zinc-800 bg-zinc-900/60">
+
+                              <th className="px-5 py-4 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                Topic
+                              </th>
+
+                              {trendData.papers_years.map(
+                                (
+                                  yearValue
+                                ) => (
+
+                                  <th
+                                    key={
+                                      yearValue
+                                    }
+                                    className="px-5 py-4 text-center text-xs font-medium uppercase tracking-wide text-zinc-500"
+                                  >
+                                    {yearValue}
+                                  </th>
+
+                                )
+                              )}
+
+                              <th className="px-5 py-4 text-center text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                Total
+                              </th>
+
+                            </tr>
+
+                          </thead>
+
+                          <tbody>
+
+                            {trendData.topics.map(
+                              (
+                                topic
+                              ) => (
+
+                                <tr
+                                  key={
+                                    topic.id
+                                  }
+                                  className="border-b border-zinc-800 last:border-b-0"
+                                >
+
+                                  <td className="max-w-xs px-5 py-4">
+
+                                    <p className="font-medium leading-6 text-zinc-200">
+                                      {topic.topic}
+                                    </p>
+
+                                    <p className="mt-1 text-xs text-zinc-600">
+                                      {Math.round(
+                                        topic.cohesion *
+                                        100
+                                      )}% cohesion
+                                    </p>
+
+                                  </td>
+
+                                  {trendData.papers_years.map(
                                     (
-                                      question
-                                    ) => (
+                                      yearValue
+                                    ) => {
 
-                                      <div
-                                        key={
-                                          question.id
-                                        }
-                                        className="border-b border-zinc-800 px-6 py-6 last:border-b-0"
-                                      >
+                                      const count =
+                                        getTopicYearCount(
+                                          topic,
+                                          yearValue
+                                        );
 
-                                        <div className="flex flex-wrap items-center gap-2">
+                                      const isSelected =
+                                        selectedMatrixCell?.topicId ===
+                                          topic.id &&
+                                        selectedMatrixCell.year ===
+                                          yearValue;
 
-                                          <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                            {question.year}
-                                          </span>
+                                      return (
 
-                                          <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                            {question.exam}
-                                          </span>
+                                        <td
+                                          key={
+                                            yearValue
+                                          }
+                                          className="px-4 py-4 text-center"
+                                        >
 
-                                          <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
-                                            Question{" "}
-                                            {question.question_number}
-                                          </span>
+                                          {count > 0 ? (
 
-                                          {question.page_number && (
+                                            <button
+                                              onClick={() =>
+                                                handleMatrixCellClick(
+                                                  topic,
+                                                  yearValue
+                                                )
+                                              }
+                                              className={`inline-flex h-10 min-w-10 items-center justify-center rounded-lg border px-3 text-sm font-semibold transition ${
+                                                isSelected
+                                                  ? "border-white bg-white text-black"
+                                                  : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800"
+                                              }`}
+                                            >
+                                              {count}
+                                            </button>
 
-                                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-400">
-                                              Page{" "}
-                                              {question.page_number}
+                                          ) : (
+
+                                            <span className="text-sm text-zinc-700">
+                                              —
                                             </span>
 
                                           )}
 
-                                        </div>
+                                        </td>
 
-                                        <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
-                                          {question.text}
-                                        </p>
-
-                                        <a
-                                          href={
-                                            getPaperUrl(
-                                              question.paper_id,
-                                              question.page_number
-                                            )
-                                          }
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="mt-5 inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
-                                        >
-                                          Open source paper
-                                        </a>
-
-                                      </div>
-
-                                    )
+                                      );
+                                    }
                                   )}
 
-                                </div>
+                                  <td className="px-5 py-4 text-center font-semibold text-zinc-300">
+                                    {topic.question_count}
+                                  </td>
+
+                                </tr>
+
+                              )
+                            )}
+
+                          </tbody>
+
+                        </table>
+
+                      </div>
+
+                    </div>
+
+                  )}
+
+                  {/* =================================================
+                      SELECTED MATRIX CELL QUESTIONS
+                  ================================================= */}
+
+                  {selectedMatrixCell &&
+                   selectedMatrixTopic && (
+
+                    <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950">
+
+                      <div className="flex flex-col justify-between gap-4 border-b border-zinc-800 bg-zinc-900/70 px-6 py-5 md:flex-row md:items-center">
+
+                        <div>
+
+                          <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-600">
+                            Selected year
+                          </p>
+
+                          <h3 className="mt-2 text-lg font-semibold">
+                            {selectedMatrixTopic.topic}
+                          </h3>
+
+                          <p className="mt-1 text-sm text-zinc-400">
+                            {selectedMatrixCell.year} ·{" "}
+                            {selectedMatrixQuestions.length}{" "}
+                            {selectedMatrixQuestions.length === 1
+                              ? "question"
+                              : "questions"}
+                          </p>
+
+                        </div>
+
+                        <button
+                          onClick={() =>
+                            setSelectedMatrixCell(
+                              null
+                            )
+                          }
+                          className="self-start rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 transition hover:bg-zinc-800 hover:text-white md:self-auto"
+                        >
+                          Close
+                        </button>
+
+                      </div>
+
+                      {selectedMatrixQuestions.map(
+                        (
+                          question
+                        ) => (
+
+                          <div
+                            key={
+                              question.id
+                            }
+                            className="border-b border-zinc-800 px-6 py-6 last:border-b-0"
+                          >
+
+                            <div className="flex flex-wrap items-center gap-2">
+
+                              <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                {question.year}
+                              </span>
+
+                              <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                {question.exam}
+                              </span>
+
+                              <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                Question{" "}
+                                {question.question_number}
+                              </span>
+
+                              {question.page_number && (
+
+                                <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-400">
+                                  Page{" "}
+                                  {question.page_number}
+                                </span>
 
                               )}
 
-                            </article>
+                            </div>
 
-                          );
-                        }
+                            <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                              {question.text}
+                            </p>
+
+                            <a
+                              href={
+                                getPaperUrl(
+                                  question.paper_id,
+                                  question.page_number
+                                )
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-5 inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+                            >
+                              Open source paper
+                              <span aria-hidden="true">
+                                ↗
+                              </span>
+                            </a>
+
+                          </div>
+
+                        )
                       )}
 
                     </div>
 
-                  </div>
+                  )}
 
-                )}
+                  {/* =================================================
+                      TOPIC CARDS
+                  ================================================= */}
 
-              </div>
+                  {trendData.topics.length > 0 && (
 
-            )}
+                    <div className="mt-12">
+
+                      <div className="mb-5">
+
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-600">
+                          Topic Details
+                        </p>
+
+                        <h3 className="mt-2 text-xl font-semibold tracking-tight">
+                          Recurring topic breakdown
+                        </h3>
+
+                      </div>
+
+                      <div className="space-y-4">
+
+                        {trendData.topics.map(
+                          (
+                            topic,
+                            index
+                          ) => {
+
+                            const isOpen =
+                              openTopics.includes(
+                                topic.id
+                              );
+
+                            const cohesionPercent =
+                              Math.round(
+                                topic.cohesion *
+                                100
+                              );
+
+                            const maximumYearCount =
+                              getTopicMaximumYearCount(
+                                topic
+                              );
+
+                            return (
+
+                              <article
+                                key={
+                                  topic.id
+                                }
+                                className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950"
+                              >
+
+                                <button
+                                  onClick={() =>
+                                    toggleTopic(
+                                      topic.id
+                                    )
+                                  }
+                                  className="w-full px-6 py-6 text-left transition hover:bg-zinc-900"
+                                >
+
+                                  <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
+
+                                    <div className="min-w-0">
+
+                                      <div className="flex flex-wrap items-center gap-2">
+
+                                        <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">
+                                          Topic{" "}
+                                          {index + 1}
+                                        </span>
+
+                                        <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
+                                          {topic.question_count}{" "}
+                                          {topic.question_count === 1
+                                            ? "question"
+                                            : "questions"}
+                                        </span>
+
+                                        <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
+                                          {topic.appearance_count}{" "}
+                                          {topic.appearance_count === 1
+                                            ? "year"
+                                            : "years"}
+                                        </span>
+
+                                      </div>
+
+                                      <h3 className="mt-4 text-xl font-semibold leading-8">
+                                        {topic.topic}
+                                      </h3>
+
+                                      <div className="mt-4 flex flex-wrap gap-2">
+
+                                        {topic.years.map(
+                                          (
+                                            yearValue
+                                          ) => (
+
+                                            <span
+                                              key={
+                                                yearValue
+                                              }
+                                              className="rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400"
+                                            >
+                                              {yearValue}
+                                            </span>
+
+                                          )
+                                        )}
+
+                                      </div>
+
+                                    </div>
+
+                                    <div className="flex shrink-0 items-center gap-4">
+
+                                      <div className="text-right">
+
+                                        <p className="text-xs uppercase tracking-wide text-zinc-600">
+                                          Cohesion
+                                        </p>
+
+                                        <p className="mt-1 font-medium text-zinc-300">
+                                          {cohesionPercent}%
+                                        </p>
+
+                                      </div>
+
+                                      <span className="text-2xl text-zinc-500">
+                                        {isOpen
+                                          ? "−"
+                                          : "+"}
+                                      </span>
+
+                                    </div>
+
+                                  </div>
+
+                                </button>
+
+                                {isOpen && (
+
+                                  <div className="border-t border-zinc-800">
+
+                                    <div className="border-b border-zinc-800 bg-zinc-900/40 px-6 py-6">
+
+                                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                        Frequency by year
+                                      </p>
+
+                                      <div className="mt-5 space-y-4">
+
+                                        {trendData.papers_years.map(
+                                          (
+                                            yearValue
+                                          ) => {
+
+                                            const count =
+                                              getTopicYearCount(
+                                                topic,
+                                                yearValue
+                                              );
+
+                                            const widthPercentage =
+                                              count === 0
+                                                ? 0
+                                                : Math.max(
+                                                    10,
+                                                    (
+                                                      count /
+                                                      maximumYearCount
+                                                    ) *
+                                                      100
+                                                  );
+
+                                            return (
+
+                                              <div
+                                                key={
+                                                  yearValue
+                                                }
+                                              >
+
+                                                <div className="mb-2 flex items-center justify-between gap-4">
+
+                                                  <span className="text-sm font-medium text-zinc-300">
+                                                    {yearValue}
+                                                  </span>
+
+                                                  <span className="text-sm text-zinc-500">
+                                                    {count}{" "}
+                                                    {count === 1
+                                                      ? "question"
+                                                      : "questions"}
+                                                  </span>
+
+                                                </div>
+
+                                                <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+
+                                                  {count > 0 && (
+
+                                                    <div
+                                                      className="h-full rounded-full bg-zinc-300 transition-all"
+                                                      style={{
+                                                        width:
+                                                          `${widthPercentage}%`,
+                                                      }}
+                                                    />
+
+                                                  )}
+
+                                                </div>
+
+                                              </div>
+
+                                            );
+                                          }
+                                        )}
+
+                                      </div>
+
+                                    </div>
+
+                                    <div className="border-b border-zinc-800 bg-zinc-900/50 px-6 py-4">
+
+                                      <p className="text-sm text-zinc-500">
+                                        Past-paper questions grouped into this recurring topic
+                                      </p>
+
+                                    </div>
+
+                                    {topic.questions.map(
+                                      (
+                                        question
+                                      ) => (
+
+                                        <div
+                                          key={
+                                            question.id
+                                          }
+                                          className="border-b border-zinc-800 px-6 py-6 last:border-b-0"
+                                        >
+
+                                          <div className="flex flex-wrap items-center gap-2">
+
+                                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                              {question.year}
+                                            </span>
+
+                                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                              {question.exam}
+                                            </span>
+
+                                            <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
+                                              Question{" "}
+                                              {question.question_number}
+                                            </span>
+
+                                            {question.page_number && (
+
+                                              <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs text-zinc-400">
+                                                Page{" "}
+                                                {question.page_number}
+                                              </span>
+
+                                            )}
+
+                                          </div>
+
+                                          <p className="mt-5 whitespace-pre-line leading-7 text-zinc-300">
+                                            {question.text}
+                                          </p>
+
+                                          <a
+                                            href={
+                                              getPaperUrl(
+                                                question.paper_id,
+                                                question.page_number
+                                              )
+                                            }
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="mt-5 inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+                                          >
+                                            Open source paper
+                                            <span aria-hidden="true">
+                                              ↗
+                                            </span>
+                                          </a>
+
+                                        </div>
+
+                                      )
+                                    )}
+
+                                  </div>
+
+                                )}
+
+                              </article>
+
+                            );
+                          }
+                        )}
+
+                      </div>
+
+                    </div>
+
+                  )}
+
+                </div>
+
+              )}
+
+            </div>
 
           </section>
 
         )}
 
         {/* =====================================================
-            UPLOAD
+            LIBRARY INTRO
         ===================================================== */}
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+        <section className="mt-24 border-t border-zinc-800 pt-16">
 
-          <p className="mb-2 text-sm font-medium text-zinc-500">
-            PAPER LIBRARY
-          </p>
+          <div className="mb-8 max-w-3xl">
 
-          <h2 className="mb-6 text-2xl font-semibold">
-            Upload past paper
-          </h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-600">
+              Paper Library
+            </p>
 
-          <div className="mb-6">
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight">
+              Manage the exam-paper dataset
+            </h2>
 
-            <label className="mb-2 block text-sm text-zinc-400">
-              Module
-            </label>
-
-            <input
-              type="text"
-              value={
-                module
-              }
-              onChange={(
-                event
-              ) =>
-                setModule(
-                  event.target.value
-                )
-              }
-              placeholder="e.g. CS404"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none transition focus:border-zinc-500"
-            />
+            <p className="mt-3 text-sm leading-7 text-zinc-500">
+              Upload additional papers for parsing and indexing, or
+              browse the documents currently available to the search
+              and trend-analysis system.
+            </p>
 
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
+        </section>
+
+        {/* =====================================================
+            UPLOAD
+        ===================================================== */}
+
+        <section className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/70">
+
+          <div className="border-b border-zinc-800 px-6 py-6 sm:px-8">
+
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-600">
+              Add Paper
+            </p>
+
+            <h2 className="mt-2 text-xl font-semibold">
+              Upload a past paper
+            </h2>
+
+            <p className="mt-2 text-sm text-zinc-500">
+              PDFs are parsed into structured questions and indexed
+              for semantic retrieval.
+            </p>
+
+          </div>
+
+          <div className="p-6 sm:p-8">
 
             <div>
 
-              <label className="mb-2 block text-sm text-zinc-400">
-                Year
-              </label>
-
-              <input
-                type="number"
-                value={
-                  year
-                }
-                onChange={(
-                  event
-                ) =>
-                  setYear(
-                    event.target.value
-                  )
-                }
-                placeholder="2025"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none transition focus:border-zinc-500"
-              />
-
-            </div>
-
-            <div>
-
-              <label className="mb-2 block text-sm text-zinc-400">
-                Exam
+              <label className="mb-2 block text-sm font-medium text-zinc-300">
+                Module
               </label>
 
               <input
                 type="text"
                 value={
-                  exam
+                  module
                 }
                 onChange={(
                   event
                 ) =>
-                  setExam(
+                  setModule(
                     event.target.value
                   )
                 }
-                placeholder="January"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 outline-none transition focus:border-zinc-500"
+                placeholder="e.g. CS404"
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3.5 outline-none transition placeholder:text-zinc-700 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-700"
               />
 
             </div>
 
+            <div className="mt-5 grid gap-5 md:grid-cols-2">
+
+              <div>
+
+                <label className="mb-2 block text-sm font-medium text-zinc-300">
+                  Year
+                </label>
+
+                <input
+                  type="number"
+                  value={
+                    year
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setYear(
+                      event.target.value
+                    )
+                  }
+                  placeholder="2025"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3.5 outline-none transition placeholder:text-zinc-700 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-700"
+                />
+
+              </div>
+
+              <div>
+
+                <label className="mb-2 block text-sm font-medium text-zinc-300">
+                  Exam
+                </label>
+
+                <input
+                  type="text"
+                  value={
+                    exam
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setExam(
+                      event.target.value
+                    )
+                  }
+                  placeholder="January"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3.5 outline-none transition placeholder:text-zinc-700 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-700"
+                />
+
+              </div>
+
+            </div>
+
+            <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-700 bg-zinc-950/60 px-6 py-14 text-center transition hover:border-zinc-500 hover:bg-zinc-950">
+
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400">
+                ↑
+              </div>
+
+              <span className="text-base font-medium">
+
+                {file
+                  ? file.name
+                  : "Choose a PDF"}
+
+              </span>
+
+              <span className="mt-2 text-sm text-zinc-500">
+
+                {file
+                  ? "File selected and ready to upload"
+                  : "Select a university past-paper PDF"}
+
+              </span>
+
+              <input
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(
+                  event
+                ) => {
+
+                  const selectedFile =
+                    event.target.files?.[0];
+
+                  if (selectedFile) {
+                    setFile(
+                      selectedFile
+                    );
+                  }
+                }}
+              />
+
+            </label>
+
+            <button
+              onClick={
+                handleUpload
+              }
+              disabled={
+                !file ||
+                uploading
+              }
+              className="mt-6 w-full rounded-xl bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+
+              {uploading
+                ? "Uploading..."
+                : "Upload and index paper"}
+
+            </button>
+
+            {message && (
+
+              <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3">
+
+                <p className="text-sm text-zinc-400">
+                  {message}
+                </p>
+
+              </div>
+
+            )}
+
           </div>
-
-          <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 px-6 py-14 transition hover:border-zinc-500 hover:bg-zinc-800/50">
-
-            <span className="text-lg font-medium">
-
-              {file
-                ? file.name
-                : "Choose a PDF"}
-
-            </span>
-
-            <span className="mt-2 text-sm text-zinc-500">
-
-              {file
-                ? "Ready to upload"
-                : "Click here to select a past paper"}
-
-            </span>
-
-            <input
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={(
-                event
-              ) => {
-
-                const selectedFile =
-                  event.target.files?.[0];
-
-                if (selectedFile) {
-                  setFile(
-                    selectedFile
-                  );
-                }
-              }}
-            />
-
-          </label>
-
-          <button
-            onClick={
-              handleUpload
-            }
-            disabled={
-              !file ||
-              uploading
-            }
-            className="mt-6 w-full rounded-lg bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-
-            {uploading
-              ? "Uploading..."
-              : "Upload paper"}
-
-          </button>
-
-          {message && (
-
-            <p className="mt-4 text-sm text-zinc-400">
-              {message}
-            </p>
-
-          )}
 
         </section>
 
@@ -2526,21 +2775,21 @@ export default function Home() {
 
         <section className="mt-16">
 
-          <div className="mb-6 flex items-end justify-between">
+          <div className="mb-6 flex items-end justify-between gap-6">
 
             <div>
 
-              <p className="mb-2 text-sm font-medium text-zinc-500">
-                LIBRARY
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-600">
+                Indexed Documents
               </p>
 
-              <h2 className="text-2xl font-semibold">
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">
                 Past papers
               </h2>
 
             </div>
 
-            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-sm text-zinc-400">
+            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-400">
 
               {papers.length}{" "}
 
@@ -2554,16 +2803,34 @@ export default function Home() {
 
           {loadingPapers ? (
 
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
-              Loading papers...
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+
+              <div className="flex items-center gap-3">
+
+                <div className="h-2 w-2 animate-pulse rounded-full bg-zinc-400" />
+
+                <p className="text-sm text-zinc-400">
+                  Loading indexed papers...
+                </p>
+
+              </div>
+
             </div>
 
           ) : papers.length === 0 ? (
 
             <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">
 
-              <p className="font-medium text-zinc-300">
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-600">
+                □
+              </div>
+
+              <p className="mt-4 font-medium text-zinc-300">
                 No papers uploaded yet.
+              </p>
+
+              <p className="mt-2 text-sm text-zinc-600">
+                Upload a PDF above to begin building the search index.
               </p>
 
             </div>
@@ -2591,13 +2858,24 @@ export default function Home() {
                         moduleName
                       );
 
+                    const moduleYears =
+                      Array.from(
+                        new Set(
+                          modulePapers.map(
+                            (paper) => paper.year
+                          )
+                        )
+                      ).sort(
+                        (a, b) => b - a
+                      );
+
                     return (
 
                       <div
                         key={
                           moduleName
                         }
-                        className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900"
+                        className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/80 transition hover:border-zinc-700"
                       >
 
                         <button
@@ -2606,28 +2884,35 @@ export default function Home() {
                               moduleName
                             )
                           }
-                          className="flex w-full items-center justify-between px-6 py-5 text-left transition hover:bg-zinc-800/50"
+                          className="flex w-full items-center justify-between gap-6 px-6 py-5 text-left transition hover:bg-zinc-800/40"
                         >
 
-                          <div>
+                          <div className="min-w-0">
 
-                            <h3 className="text-lg font-semibold">
-                              {moduleName}
-                            </h3>
+                            <div className="flex flex-wrap items-center gap-3">
 
-                            <p className="mt-1 text-sm text-zinc-500">
+                              <h3 className="text-lg font-semibold">
+                                {moduleName}
+                              </h3>
 
-                              {modulePapers.length}{" "}
+                              <span className="rounded-full border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-500">
+                                {modulePapers.length}{" "}
+                                {modulePapers.length === 1
+                                  ? "paper"
+                                  : "papers"}
+                              </span>
 
-                              {modulePapers.length === 1
-                                ? "paper"
-                                : "papers"}
+                            </div>
 
+                            <p className="mt-2 text-sm text-zinc-500">
+                              {moduleYears.length > 0
+                                ? `${moduleYears[moduleYears.length - 1]}–${moduleYears[0]}`
+                                : "No years available"}
                             </p>
 
                           </div>
 
-                          <span className="text-xl text-zinc-400">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-lg text-zinc-400">
                             {isOpen
                               ? "−"
                               : "+"}
@@ -2658,13 +2943,13 @@ export default function Home() {
                                       {paper.exam}
                                     </p>
 
-                                    <p className="mt-2 text-xs text-zinc-600">
+                                    <p className="mt-2 break-all text-xs text-zinc-600">
                                       {paper.original_filename}
                                     </p>
 
                                   </div>
 
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex shrink-0 items-center gap-3">
 
                                     <a
                                       href={
@@ -2674,9 +2959,12 @@ export default function Home() {
                                       }
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800"
+                                      className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800"
                                     >
                                       Open PDF
+                                      <span aria-hidden="true">
+                                        ↗
+                                      </span>
                                     </a>
 
                                     <button
@@ -2689,7 +2977,7 @@ export default function Home() {
                                         deletingPaperId ===
                                         paper.id
                                       }
-                                      className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950/60 disabled:cursor-not-allowed disabled:opacity-50"
+                                      className="rounded-lg border border-red-900/50 bg-red-950/20 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950/50 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
 
                                       {deletingPaperId ===
@@ -2721,6 +3009,139 @@ export default function Home() {
           )}
 
         </section>
+
+        {/* =====================================================
+            HOW IT WORKS
+        ===================================================== */}
+
+        <section className="mt-24 border-t border-zinc-800 pt-16">
+
+          <div className="max-w-3xl">
+
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-600">
+              How it works
+            </p>
+
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+              From PDF to semantic search
+            </h2>
+
+            <p className="mt-3 text-sm leading-7 text-zinc-500">
+              Uploaded exam papers are parsed into individual questions,
+              converted into semantic embeddings, stored alongside their
+              metadata, and ranked against search queries using a hybrid
+              semantic and keyword retrieval strategy.
+            </p>
+
+          </div>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-4">
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+
+              <span className="text-xs font-semibold text-zinc-600">
+                01
+              </span>
+
+              <p className="mt-4 font-medium">
+                Parse PDFs
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-zinc-500">
+                Extract and structure exam questions and sub-questions.
+              </p>
+
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+
+              <span className="text-xs font-semibold text-zinc-600">
+                02
+              </span>
+
+              <p className="mt-4 font-medium">
+                Create embeddings
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-zinc-500">
+                Represent each question using a Sentence Transformer.
+              </p>
+
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+
+              <span className="text-xs font-semibold text-zinc-600">
+                03
+              </span>
+
+              <p className="mt-4 font-medium">
+                Rank matches
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-zinc-500">
+                Combine semantic similarity with keyword relevance.
+              </p>
+
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+
+              <span className="text-xs font-semibold text-zinc-600">
+                04
+              </span>
+
+              <p className="mt-4 font-medium">
+                Analyse trends
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-zinc-500">
+                Cluster recurring topics and compare questions across years.
+              </p>
+
+            </div>
+
+          </div>
+
+        </section>
+
+        {/* =====================================================
+            FOOTER
+        ===================================================== */}
+
+        <footer className="mt-24 border-t border-zinc-800 py-10">
+
+          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
+
+            <div>
+
+              <p className="font-semibold">
+                Exam Search
+              </p>
+
+              <p className="mt-1 text-sm text-zinc-600">
+                Full-stack semantic search and exam-analysis platform.
+              </p>
+
+            </div>
+
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-zinc-600">
+
+              <span>Next.js</span>
+
+              <span>TypeScript</span>
+
+              <span>FastAPI</span>
+
+              <span>SQLite</span>
+
+              <span>Sentence Transformers</span>
+
+            </div>
+
+          </div>
+
+        </footer>
 
       </div>
 
