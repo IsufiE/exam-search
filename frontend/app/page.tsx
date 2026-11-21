@@ -84,11 +84,6 @@ type SimilarQuestionsResponse = {
 
 type MainView = "search" | "trends" | "library" | "upload";
 
-type SelectedMatrixCell = {
-  topicId: string;
-  year: number;
-} | null;
-
 const API =
   process.env.NEXT_PUBLIC_API_URL ??
   "http://127.0.0.1:8000";
@@ -176,12 +171,6 @@ export default function Home() {
 
   const [loadingTrends, setLoadingTrends] = useState(false);
   const [trendMessage, setTrendMessage] = useState("");
-  const [openTopics, setOpenTopics] = useState<string[]>([]);
-
-  const [
-    selectedMatrixCell,
-    setSelectedMatrixCell,
-  ] = useState<SelectedMatrixCell>(null);
 
   // =========================================================
   // Similar-question state
@@ -296,34 +285,6 @@ export default function Home() {
   }, [filteredPapers]);
 
   // =========================================================
-  // Selected matrix data
-  // =========================================================
-
-  const selectedMatrixTopic = useMemo(() => {
-    if (!trendData || !selectedMatrixCell) {
-      return null;
-    }
-
-    return (
-      trendData.topics.find(
-        (topic) =>
-          topic.id === selectedMatrixCell.topicId
-      ) || null
-    );
-  }, [trendData, selectedMatrixCell]);
-
-  const selectedMatrixQuestions = useMemo(() => {
-    if (!selectedMatrixTopic || !selectedMatrixCell) {
-      return [];
-    }
-
-    return selectedMatrixTopic.questions.filter(
-      (question) =>
-        question.year === selectedMatrixCell.year
-    );
-  }, [selectedMatrixTopic, selectedMatrixCell]);
-
-  // =========================================================
   // Load papers
   // =========================================================
 
@@ -383,8 +344,6 @@ export default function Home() {
       setTrendModule("");
       setTrendData(null);
       setTrendMessage("");
-      setOpenTopics([]);
-      setSelectedMatrixCell(null);
 
       setSimilarQuestionsData(null);
       setSimilarQuestionsMessage("");
@@ -404,76 +363,6 @@ export default function Home() {
       }
 
       return [...current, moduleName];
-    });
-  }
-
-  // =========================================================
-  // Topic accordion
-  // =========================================================
-
-  function toggleTopic(topicId: string) {
-    setOpenTopics((current) => {
-      if (current.includes(topicId)) {
-        return current.filter(
-          (item) => item !== topicId
-        );
-      }
-
-      return [...current, topicId];
-    });
-  }
-
-  // =========================================================
-  // Trend helpers
-  // =========================================================
-
-  function getTopicYearCount(
-    topic: TrendTopic,
-    targetYear: number
-  ) {
-    return topic.questions.filter(
-      (question) =>
-        question.year === targetYear
-    ).length;
-  }
-
-  function getTopicMaximumYearCount(topic: TrendTopic) {
-    if (!trendData) {
-      return 1;
-    }
-
-    const counts = trendData.papers_years.map(
-      (yearValue) =>
-        getTopicYearCount(topic, yearValue)
-    );
-
-    return Math.max(1, ...counts);
-  }
-
-  function handleMatrixCellClick(
-    topic: TrendTopic,
-    targetYear: number
-  ) {
-    const count = getTopicYearCount(
-      topic,
-      targetYear
-    );
-
-    if (count === 0) {
-      return;
-    }
-
-    if (
-      selectedMatrixCell?.topicId === topic.id &&
-      selectedMatrixCell.year === targetYear
-    ) {
-      setSelectedMatrixCell(null);
-      return;
-    }
-
-    setSelectedMatrixCell({
-      topicId: topic.id,
-      year: targetYear,
     });
   }
 
@@ -545,8 +434,6 @@ export default function Home() {
       setAddingNewModule(false);
 
       setTrendData(null);
-      setOpenTopics([]);
-      setSelectedMatrixCell(null);
 
       setSimilarQuestionsData(null);
       setSimilarQuestionsMessage("");
@@ -605,8 +492,6 @@ export default function Home() {
 
       setTrendData(null);
       setTrendMessage("");
-      setOpenTopics([]);
-      setSelectedMatrixCell(null);
 
       setSimilarQuestionsData(null);
       setSimilarQuestionsMessage("");
@@ -702,8 +587,6 @@ export default function Home() {
 
       setTrendMessage("");
       setTrendData(null);
-      setOpenTopics([]);
-      setSelectedMatrixCell(null);
 
       setSimilarQuestionsData(null);
       setSimilarQuestionsMessage("");
@@ -1116,805 +999,162 @@ export default function Home() {
         ===================================================== */}
 
         {mainView === "trends" && (
-
           <section aria-labelledby="trends-title">
-
-            <div className="mb-6">
-
+            <header className="mb-6">
               <h1 id="trends-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">
                 Exam trends
               </h1>
-
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-[#47554b]">
-                Choose a module to see recurring topics and similar questions across years.
+              <p className="mt-2 text-sm leading-6 text-[#47554b]">
+                See which topics appeared across exam years and compare the original questions.
               </p>
+            </header>
 
-            </div>
-
-            <div className="rounded-lg border border-[#cbc5b4] bg-[#f2eddf] p-4 sm:p-6">
-
-              <label htmlFor="trend-module" className="mb-2 block text-sm font-medium text-[#39493e]">
+            <form
+              className="flex flex-wrap items-end gap-3 border-b border-[#cbc5b4] pb-6"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleLoadTrends();
+              }}
+            >
+              <label className="grid w-full gap-1.5 text-sm font-medium sm:w-56">
                 Module
+                <select
+                  value={trendModule}
+                  disabled={loadingTrends}
+                  onChange={(event) => {
+                    setTrendModule(event.target.value);
+                    setTrendData(null);
+                    setTrendMessage("");
+                    setSimilarQuestionsData(null);
+                    setSimilarQuestionsMessage("");
+                  }}
+                  className="min-h-11 rounded-md border border-[#8a9182] bg-[#f2eddf] px-3 text-base"
+                >
+                  <option value="">Select a module</option>
+                  {availableModules.map((moduleName) => (
+                    <option key={moduleName} value={moduleName}>{moduleName}</option>
+                  ))}
+                </select>
               </label>
-
-              <select
-                id="trend-module"
-                value={trendModule}
-                onChange={(event) => {
-                  setTrendModule(event.target.value);
-                  setTrendData(null);
-                  setTrendMessage("");
-                  setOpenTopics([]);
-                  setSelectedMatrixCell(null);
-                  setSimilarQuestionsData(null);
-                  setSimilarQuestionsMessage("");
-                }}
-                className="w-full rounded-xl border border-[#8a9182] bg-[#f2eddf] px-4 py-3.5 text-[#212d27] outline-none transition focus:border-[#52795c] focus:ring-1 focus:ring-[#52795c]"
-              >
-                <option value="">Select a module</option>
-
-                {availableModules.map((moduleName) => (
-                  <option
-                    key={moduleName}
-                    value={moduleName}
-                  >
-                    {moduleName}
-                  </option>
-                ))}
-              </select>
-
               <button
-                onClick={handleLoadTrends}
+                type="submit"
                 disabled={loadingTrends || !trendModule}
-                className="mt-4 rounded-xl bg-[#315a45] px-5 py-3 font-semibold text-white transition hover:bg-[#234532] disabled:cursor-not-allowed disabled:bg-[#d8d9cb] disabled:text-[#47554b]"
+                className="min-h-11 rounded-md bg-[#315a45] px-4 text-sm font-semibold text-white hover:bg-[#234532] disabled:bg-[#d8d9cb] disabled:text-[#47554b]"
               >
-                {loadingTrends
-                  ? "Analysing..."
-                  : "Analyse trends"}
+                {loadingTrends ? "Analysing…" : "Analyse trends"}
               </button>
+            </form>
 
-              {trendMessage && (
-                <div className="mt-5 rounded-xl border border-[#cbc5b4] bg-[#e8e1d1] px-4 py-3">
-                  <p className="text-sm text-[#47554b]">
-                    {trendMessage}
-                  </p>
-                </div>
-              )}
+            {(loadingTrends || trendMessage) && (
+              <p role="status" className="mt-4 text-sm text-[#47554b]">
+                {loadingTrends ? `Analysing ${trendModule} past papers…` : trendMessage}
+              </p>
+            )}
 
-              {trendData && (
-
-                <div className="mt-10 border-t border-[#cbc5b4] pt-8">
-
-                  {/* Summary */}
-
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
-                    {[
-                      {
-                        label: "Module",
-                        value: trendData.module,
-                      },
-                      {
-                        label: "Years analysed",
-                        value: trendData.years_analysed,
-                      },
-                      {
-                        label: "Questions",
-                        value: trendData.questions_analysed,
-                      },
-                      {
-                        label: "Recurring topics",
-                        value: trendData.topic_count,
-                      },
-                    ].map((stat) => (
-                      <div
-                        key={stat.label}
-                        className="rounded-2xl border border-[#cbc5b4] bg-[#e8e1d1] p-5"
-                      >
-                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#47554b]">
-                          {stat.label}
-                        </p>
-
-                        <p className="mt-3 text-xl font-semibold">
-                          {stat.value}
-                        </p>
-                      </div>
-                    ))}
-
-                  </div>
-
-                  {/* Year badges */}
-
+            {trendData && (
+              <div className="mt-7 space-y-9">
+                <p className="text-sm leading-6 text-[#47554b]">
+                  <strong className="font-semibold text-[#212d27]">{trendData.module}</strong>
+                  {" · "}{trendData.questions_analysed} questions from {trendData.years_analysed}{" "}
+                  {trendData.years_analysed === 1 ? "exam year" : "exam years"}
                   {trendData.papers_years.length > 0 && (
-                    <div className="mt-6 flex flex-wrap items-center gap-2">
-
-                      <span className="mr-2 text-sm text-[#47554b]">
-                        Exam years
-                      </span>
-
-                      {trendData.papers_years.map((yearValue) => (
-                        <span
-                          key={yearValue}
-                          className="rounded-full border border-[#cbc5b4] bg-[#e8e1d1] px-3 py-1 text-xs text-[#39493e]"
-                        >
-                          {yearValue}
-                        </span>
-                      ))}
-
-                    </div>
+                    <> ({[...trendData.papers_years].sort((a, b) => a - b).join(", ")})</>
                   )}
-
-                  {/* =================================================
-                      SIMILAR PAST QUESTIONS
-                  ================================================= */}
-
-                  <div className="mt-12">
-
-                    <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#47554b]">
-                          Similar Past Questions
-                        </p>
-
-                        <h3 className="mt-2 text-xl font-semibold tracking-tight">
-                          Possible repeated or reworded questions
-                        </h3>
-
-                        <p className="mt-2 max-w-3xl text-sm leading-6 text-[#47554b]">
-                          Strong semantic matches between questions
-                          from different exam years. These indicate
-                          similar question patterns rather than
-                          guaranteed exact repeats.
-                        </p>
-                      </div>
-
-                      {similarQuestionsData && (
-                        <span className="shrink-0 rounded-full border border-[#cbc5b4] bg-[#e8e1d1] px-3 py-1.5 text-xs text-[#47554b]">
-                          {similarQuestionsData.match_count}{" "}
-                          {similarQuestionsData.match_count === 1
-                            ? "match"
-                            : "matches"}
-                        </span>
-                      )}
-
-                    </div>
-
-                    {similarQuestionsMessage && (
-                      <div className="rounded-xl border border-[#cbc5b4] bg-[#e8e1d1] px-5 py-4">
-                        <p className="text-sm text-[#47554b]">
-                          {similarQuestionsMessage}
-                        </p>
-                      </div>
-                    )}
-
-                    {similarQuestionsData &&
-                      similarQuestionsData.matches.length > 0 && (
-
-                        <div className="space-y-5">
-
-                          {similarQuestionsData.matches.map(
-                            (match, index) => {
-                              const similarityPercent = Math.max(
-                                0,
-                                Math.min(
-                                  100,
-                                  Math.round(match.similarity * 100)
-                                )
-                              );
-
-                              return (
-
-                                <article
-                                  key={match.id}
-                                  className="overflow-hidden rounded-2xl border border-[#cbc5b4] bg-[#e8e1d1]"
-                                >
-
-                                  <div className="flex flex-col justify-between gap-4 border-b border-[#cbc5b4] bg-[#f2eddf] px-6 py-5 sm:flex-row sm:items-center">
-
-                                    <div>
-                                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#47554b]">
-                                        Match {index + 1}
-                                      </p>
-
-                                      <p className="mt-1 text-sm text-[#47554b]">
-                                        Questions from different exam years
-                                      </p>
-                                    </div>
-
-                                    <div className="shrink-0 rounded-full border border-[#8a9182] bg-[#e8e1d1] px-4 py-2">
-                                      <span className="text-sm font-semibold text-[#25392e]">
-                                        {similarityPercent}%
-                                      </span>
-
-                                      <span className="ml-1 text-xs text-[#47554b]">
-                                        similar
-                                      </span>
-                                    </div>
-
-                                  </div>
-
-                                  <div className="grid md:grid-cols-2">
-
-                                    {[
-                                      match.question,
-                                      match.similar_question,
-                                    ].map((question, questionIndex) => (
-
-                                      <div
-                                        key={`${question.id}-${questionIndex}`}
-                                        className={`p-6 ${
-                                          questionIndex === 0
-                                            ? "border-b border-[#cbc5b4] md:border-b-0 md:border-r"
-                                            : ""
-                                        }`}
-                                      >
-
-                                        <div className="flex flex-wrap items-center gap-2">
-
-                                          <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#39493e]">
-                                            {question.year}
-                                          </span>
-
-                                          <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#39493e]">
-                                            {question.exam}
-                                          </span>
-
-                                          <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#39493e]">
-                                            Question {question.question_number}
-                                          </span>
-
-                                          {question.page_number && (
-                                            <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#47554b]">
-                                              Page {question.page_number}
-                                            </span>
-                                          )}
-
-                                        </div>
-
-                                        <p className="mt-5 whitespace-pre-line leading-7 text-[#39493e]">
-                                          {question.text}
-                                        </p>
-
-                                        <a
-                                          href={getPaperUrl(
-                                            question.paper_id,
-                                            question.page_number
-                                          )}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#8a9182] bg-[#f2eddf] px-4 py-2 text-sm font-medium text-[#25392e] transition hover:bg-[#e1ddce]"
-                                        >
-                                          Open {question.year} paper
-                                          <span aria-hidden="true">↗</span>
-                                        </a>
-
-                                      </div>
-
-                                    ))}
-
-                                  </div>
-
-                                </article>
-
-                              );
-                            }
-                          )}
-
-                        </div>
-
-                      )}
-
-                  </div>
-
-                  {/* =================================================
-                      TOPIC FREQUENCY MATRIX
-                  ================================================= */}
-
-                  {trendData.topics.length > 0 && (
-
-                    <div className="mt-12">
-
-                      <div className="mb-5">
-
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#47554b]">
-                          Topic Frequency
-                        </p>
-
-                        <h3 className="mt-2 text-xl font-semibold tracking-tight">
-                          Topic history by year
-                        </h3>
-
-                        <p className="mt-2 text-sm leading-6 text-[#47554b]">
-                          Each value shows how many questions from a
-                          recurring topic appeared in that exam year.
-                          Click a non-zero value to inspect those
-                          questions.
-                        </p>
-
-                      </div>
-
-                      <div className="overflow-x-auto rounded-2xl border border-[#cbc5b4] bg-[#e8e1d1]">
-
-                        <table className="w-full min-w-[650px] border-collapse">
-
-                          <thead>
-
-                            <tr className="border-b border-[#cbc5b4] bg-[#f2eddf]">
-
-                              <th className="px-5 py-4 text-left text-xs font-medium uppercase tracking-wide text-[#47554b]">
-                                Topic
-                              </th>
-
-                              {trendData.papers_years.map(
-                                (yearValue) => (
-                                  <th
-                                    key={yearValue}
-                                    className="px-5 py-4 text-center text-xs font-medium uppercase tracking-wide text-[#47554b]"
-                                  >
-                                    {yearValue}
-                                  </th>
-                                )
-                              )}
-
-                              <th className="px-5 py-4 text-center text-xs font-medium uppercase tracking-wide text-[#47554b]">
-                                Total
-                              </th>
-
-                            </tr>
-
-                          </thead>
-
-                          <tbody>
-
-                            {trendData.topics.map((topic) => (
-
-                              <tr
-                                key={topic.id}
-                                className="border-b border-[#cbc5b4] last:border-b-0"
-                              >
-
-                                <td className="max-w-xs px-5 py-4">
-
-                                  <p className="font-medium leading-6 text-[#25392e]">
-                                    {topic.topic}
-                                  </p>
-
-                                  <p className="mt-1 text-xs text-[#47554b]">
-                                    {Math.round(topic.cohesion * 100)}% cohesion
-                                  </p>
-
-                                </td>
-
-                                {trendData.papers_years.map(
-                                  (yearValue) => {
-                                    const count = getTopicYearCount(
-                                      topic,
-                                      yearValue
-                                    );
-
-                                    const isSelected =
-                                      selectedMatrixCell?.topicId === topic.id &&
-                                      selectedMatrixCell.year === yearValue;
-
-                                    return (
-
-                                      <td
-                                        key={yearValue}
-                                        className="px-4 py-4 text-center"
-                                      >
-
-                                        {count > 0 ? (
-
-                                          <button
-                                            onClick={() =>
-                                              handleMatrixCellClick(
-                                                topic,
-                                                yearValue
-                                              )
-                                            }
-                                            className={`inline-flex h-10 min-w-10 items-center justify-center rounded-lg border px-3 text-sm font-semibold transition ${
-                                              isSelected
-                                                ? "border-[#52795c] bg-[#dce6d7] text-[#234532]"
-                                                : "border-[#8a9182] bg-[#f2eddf] text-[#25392e] hover:border-[#52795c] hover:bg-[#e1ddce]"
-                                            }`}
-                                          >
-                                            {count}
-                                          </button>
-
-                                        ) : (
-
-                                          <span className="text-sm text-[#39493e]">
-                                            —
-                                          </span>
-
-                                        )}
-
-                                      </td>
-
-                                    );
-                                  }
-                                )}
-
-                                <td className="px-5 py-4 text-center font-semibold text-[#39493e]">
-                                  {topic.question_count}
-                                </td>
-
-                              </tr>
-
-                            ))}
-
-                          </tbody>
-
-                        </table>
-
-                      </div>
-
-                    </div>
-
-                  )}
-
-                  {/* =================================================
-                      SELECTED MATRIX QUESTIONS
-                  ================================================= */}
-
-                  {selectedMatrixCell && selectedMatrixTopic && (
-
-                    <div className="mt-6 overflow-hidden rounded-2xl border border-[#8a9182] bg-[#e8e1d1]">
-
-                      <div className="flex flex-col justify-between gap-4 border-b border-[#cbc5b4] bg-[#f2eddf] px-6 py-5 md:flex-row md:items-center">
-
-                        <div>
-
-                          <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#47554b]">
-                            Selected year
-                          </p>
-
-                          <h3 className="mt-2 text-lg font-semibold">
-                            {selectedMatrixTopic.topic}
-                          </h3>
-
-                          <p className="mt-1 text-sm text-[#47554b]">
-                            {selectedMatrixCell.year} ·{" "}
-                            {selectedMatrixQuestions.length}{" "}
-                            {selectedMatrixQuestions.length === 1
-                              ? "question"
-                              : "questions"}
-                          </p>
-
-                        </div>
-
-                        <button
-                          onClick={() => setSelectedMatrixCell(null)}
-                          className="self-start rounded-lg border border-[#8a9182] px-3 py-2 text-sm text-[#47554b] transition hover:bg-[#e1ddce] hover:text-[#212d27] md:self-auto"
-                        >
-                          Close
-                        </button>
-
-                      </div>
-
-                      {selectedMatrixQuestions.map((question) => (
-
-                        <div
-                          key={question.id}
-                          className="border-b border-[#cbc5b4] px-6 py-6 last:border-b-0"
-                        >
-
-                          <div className="flex flex-wrap items-center gap-2">
-
-                            <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#39493e]">
-                              {question.year}
-                            </span>
-
-                            <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#39493e]">
-                              {question.exam}
-                            </span>
-
-                            <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#39493e]">
-                              Question {question.question_number}
-                            </span>
-
-                            {question.page_number && (
-                              <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#47554b]">
-                                Page {question.page_number}
+                </p>
+
+                {trendData.topics.length > 0 && (
+                  <section aria-labelledby="recurring-topics-title">
+                    <h2 id="recurring-topics-title" className="text-xl font-semibold">
+                      Topics that come up most
+                    </h2>
+                    <p className="mb-4 mt-1 text-sm leading-6 text-[#47554b]">
+                      Each bar shows how many of the exam years included the topic. Open a topic to see its questions by year.
+                    </p>
+                    <div className="divide-y divide-[#cbc5b4] overflow-hidden rounded-lg border border-[#cbc5b4] bg-[#f2eddf]">
+                      {[...trendData.topics]
+                        .sort((a, b) => b.years.length - a.years.length || b.question_count - a.question_count)
+                        .map((topic) => (
+                          <details key={topic.id} className="group">
+                            <summary className="grid cursor-pointer list-none gap-2 px-4 py-3.5 hover:bg-[#e1ddce] focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#35654b] sm:grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)_auto] sm:items-center [&::-webkit-details-marker]:hidden">
+                              <span className="flex min-w-0 items-start gap-2 font-medium">
+                                <span aria-hidden="true" className="inline-block text-[#47554b] group-open:rotate-90">▸</span>
+                                {topic.topic}
                               </span>
-                            )}
+                              <span aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-[#d8d9cb]">
+                                <span
+                                  className="block h-full rounded-full bg-[#52795c]"
+                                  style={{ width: `${(topic.years.length / Math.max(1, trendData.years_analysed)) * 100}%` }}
+                                />
+                              </span>
+                              <span className="text-sm tabular-nums text-[#47554b]">
+                                {topic.years.length} of {trendData.years_analysed} years
+                              </span>
+                            </summary>
+                            <div className="border-t border-[#cbc5b4] px-4 pb-4 pt-3 sm:px-6">
+                              {[...topic.years].sort((a, b) => b - a).map((year) => (
+                                <div key={year} className="mt-3 first:mt-0">
+                                  <h3 className="text-base font-semibold">{year}</h3>
+                                  <ul className="mt-1 divide-y divide-[#cbc5b4]">
+                                    {topic.questions.filter((question) => question.year === year).map((question) => (
+                                      <li key={question.id} className="py-3">
+                                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                                          <span className="text-sm font-medium">{question.exam} · Q{question.question_number}</span>
+                                          <a href={getPaperUrl(question.paper_id, question.page_number)} target="_blank" rel="noreferrer" className="text-sm font-medium text-[#315a45] underline underline-offset-4">
+                                            Open PDF
+                                          </a>
+                                        </div>
+                                        <p className="mt-2 whitespace-pre-line break-words text-sm leading-6 text-[#39493e]">{question.text}</p>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        ))}
+                    </div>
+                  </section>
+                )}
 
+                <section aria-labelledby="similar-questions-title">
+                  <h2 id="similar-questions-title" className="text-xl font-semibold">Similar questions across years</h2>
+                  <p className="mb-4 mt-1 text-sm leading-6 text-[#47554b]">
+                    Open a pair to compare the wording and check the source papers.
+                  </p>
+                  {similarQuestionsMessage && (
+                    <p role="status" className="text-sm text-[#47554b]">{similarQuestionsMessage}</p>
+                  )}
+                  {similarQuestionsData && similarQuestionsData.matches.length > 0 && (
+                    <div className="divide-y divide-[#cbc5b4] overflow-hidden rounded-lg border border-[#cbc5b4] bg-[#f2eddf]">
+                      {similarQuestionsData.matches.map((match) => (
+                        <details key={match.id} className="group">
+                          <summary className="flex cursor-pointer list-none items-baseline gap-2 px-4 py-3 text-sm font-medium hover:bg-[#e1ddce] focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#35654b] [&::-webkit-details-marker]:hidden">
+                            <span aria-hidden="true" className="inline-block text-[#47554b] group-open:rotate-90">▸</span>
+                            <span>
+                              {match.question.year} {match.question.exam} · Q{match.question.question_number}
+                              {" / "}
+                              {match.similar_question.year} {match.similar_question.exam} · Q{match.similar_question.question_number}
+                            </span>
+                          </summary>
+                          <div className="grid min-w-0 gap-5 border-t border-[#cbc5b4] px-4 py-4 lg:grid-cols-2">
+                            {[match.question, match.similar_question].map((question) => (
+                              <div key={question.id} className="min-w-0">
+                                <h3 className="text-sm font-semibold">{question.year} {question.exam} · Q{question.question_number}</h3>
+                                <p className="my-2 whitespace-pre-line break-words text-sm leading-6 text-[#39493e]">{question.text}</p>
+                                <a href={getPaperUrl(question.paper_id, question.page_number)} target="_blank" rel="noreferrer" className="text-sm font-medium text-[#315a45] underline underline-offset-4">
+                                  Open PDF
+                                </a>
+                              </div>
+                            ))}
                           </div>
-
-                          <p className="mt-5 whitespace-pre-line leading-7 text-[#39493e]">
-                            {question.text}
-                          </p>
-
-                          <a
-                            href={getPaperUrl(
-                              question.paper_id,
-                              question.page_number
-                            )}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-5 inline-flex items-center gap-2 rounded-lg border border-[#8a9182] bg-[#f2eddf] px-4 py-2 text-sm font-medium text-[#25392e] transition hover:bg-[#e1ddce]"
-                          >
-                            Open source paper
-                            <span aria-hidden="true">↗</span>
-                          </a>
-
-                        </div>
-
+                        </details>
                       ))}
-
                     </div>
-
                   )}
-
-                  {/* =================================================
-                      TOPIC DETAILS
-                  ================================================= */}
-
-                  {trendData.topics.length > 0 && (
-
-                    <div className="mt-12">
-
-                      <div className="mb-5">
-
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#47554b]">
-                          Topic Details
-                        </p>
-
-                        <h3 className="mt-2 text-xl font-semibold tracking-tight">
-                          Recurring topic breakdown
-                        </h3>
-
-                      </div>
-
-                      <div className="space-y-4">
-
-                        {trendData.topics.map((topic, index) => {
-                          const isOpen = openTopics.includes(topic.id);
-
-                          const cohesionPercent = Math.round(
-                            topic.cohesion * 100
-                          );
-
-                          const maximumYearCount =
-                            getTopicMaximumYearCount(topic);
-
-                          return (
-
-                            <article
-                              key={topic.id}
-                              className="overflow-hidden rounded-2xl border border-[#cbc5b4] bg-[#e8e1d1]"
-                            >
-
-                              <button
-                                onClick={() => toggleTopic(topic.id)}
-                                className="w-full px-6 py-6 text-left transition hover:bg-[#f2eddf]"
-                              >
-
-                                <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
-
-                                  <div className="min-w-0">
-
-                                    <div className="flex flex-wrap items-center gap-2">
-
-                                      <span className="rounded-full bg-[#e1ddce] px-3 py-1 text-xs text-[#47554b]">
-                                        Topic {index + 1}
-                                      </span>
-
-                                      <span className="rounded-full bg-[#e1ddce] px-3 py-1 text-xs text-[#39493e]">
-                                        {topic.question_count}{" "}
-                                        {topic.question_count === 1
-                                          ? "question"
-                                          : "questions"}
-                                      </span>
-
-                                      <span className="rounded-full bg-[#e1ddce] px-3 py-1 text-xs text-[#39493e]">
-                                        {topic.appearance_count}{" "}
-                                        {topic.appearance_count === 1
-                                          ? "year"
-                                          : "years"}
-                                      </span>
-
-                                    </div>
-
-                                    <h3 className="mt-4 text-xl font-semibold leading-8">
-                                      {topic.topic}
-                                    </h3>
-
-                                    <div className="mt-4 flex flex-wrap gap-2">
-
-                                      {topic.years.map((yearValue) => (
-                                        <span
-                                          key={yearValue}
-                                          className="rounded-md border border-[#cbc5b4] px-2.5 py-1 text-xs text-[#47554b]"
-                                        >
-                                          {yearValue}
-                                        </span>
-                                      ))}
-
-                                    </div>
-
-                                  </div>
-
-                                  <div className="flex shrink-0 items-center gap-4">
-
-                                    <div className="text-right">
-
-                                      <p className="text-xs uppercase tracking-wide text-[#47554b]">
-                                        Cohesion
-                                      </p>
-
-                                      <p className="mt-1 font-medium text-[#39493e]">
-                                        {cohesionPercent}%
-                                      </p>
-
-                                    </div>
-
-                                    <span className="text-2xl text-[#47554b]">
-                                      {isOpen ? "−" : "+"}
-                                    </span>
-
-                                  </div>
-
-                                </div>
-
-                              </button>
-
-                              {isOpen && (
-
-                                <div className="border-t border-[#cbc5b4]">
-
-                                  {/* Frequency by year */}
-
-                                  <div className="border-b border-[#cbc5b4] bg-[#f2eddf] px-6 py-6">
-
-                                    <p className="text-xs font-medium uppercase tracking-wide text-[#47554b]">
-                                      Frequency by year
-                                    </p>
-
-                                    <div className="mt-5 space-y-4">
-
-                                      {trendData.papers_years.map(
-                                        (yearValue) => {
-                                          const count = getTopicYearCount(
-                                            topic,
-                                            yearValue
-                                          );
-
-                                          const widthPercentage =
-                                            count === 0
-                                              ? 0
-                                              : Math.max(
-                                                  10,
-                                                  (count / maximumYearCount) *
-                                                    100
-                                                );
-
-                                          return (
-
-                                            <div key={yearValue}>
-
-                                              <div className="mb-2 flex items-center justify-between gap-4">
-
-                                                <span className="text-sm font-medium text-[#39493e]">
-                                                  {yearValue}
-                                                </span>
-
-                                                <span className="text-sm text-[#47554b]">
-                                                  {count}{" "}
-                                                  {count === 1
-                                                    ? "question"
-                                                    : "questions"}
-                                                </span>
-
-                                              </div>
-
-                                              <div className="h-2 overflow-hidden rounded-full bg-[#e1ddce]">
-
-                                                {count > 0 && (
-                                                  <div
-                                                    className="h-full rounded-full bg-[#52795c] transition-all"
-                                                    style={{
-                                                      width: `${widthPercentage}%`,
-                                                    }}
-                                                  />
-                                                )}
-
-                                              </div>
-
-                                            </div>
-
-                                          );
-                                        }
-                                      )}
-
-                                    </div>
-
-                                  </div>
-
-                                  <div className="border-b border-[#cbc5b4] bg-[#f2eddf] px-6 py-4">
-
-                                    <p className="text-sm text-[#47554b]">
-                                      Past-paper questions grouped into this recurring topic
-                                    </p>
-
-                                  </div>
-
-                                  {/* Topic questions */}
-
-                                  {topic.questions.map((question) => (
-
-                                    <div
-                                      key={question.id}
-                                      className="border-b border-[#cbc5b4] px-6 py-6 last:border-b-0"
-                                    >
-
-                                      <div className="flex flex-wrap items-center gap-2">
-
-                                        <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#39493e]">
-                                          {question.year}
-                                        </span>
-
-                                        <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#39493e]">
-                                          {question.exam}
-                                        </span>
-
-                                        <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#39493e]">
-                                          Question {question.question_number}
-                                        </span>
-
-                                        {question.page_number && (
-                                          <span className="rounded-full bg-[#f2eddf] px-3 py-1 text-xs text-[#47554b]">
-                                            Page {question.page_number}
-                                          </span>
-                                        )}
-
-                                      </div>
-
-                                      <p className="mt-5 whitespace-pre-line leading-7 text-[#39493e]">
-                                        {question.text}
-                                      </p>
-
-                                      <a
-                                        href={getPaperUrl(
-                                          question.paper_id,
-                                          question.page_number
-                                        )}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="mt-5 inline-flex items-center gap-2 rounded-lg border border-[#8a9182] bg-[#f2eddf] px-4 py-2 text-sm font-medium text-[#25392e] transition hover:bg-[#e1ddce]"
-                                      >
-                                        Open source paper
-                                        <span aria-hidden="true">↗</span>
-                                      </a>
-
-                                    </div>
-
-                                  ))}
-
-                                </div>
-
-                              )}
-
-                            </article>
-
-                          );
-                        })}
-
-                      </div>
-
-                    </div>
-
-                  )}
-
-                </div>
-
-              )}
-
-            </div>
-
+                </section>
+              </div>
+            )}
           </section>
-
         )}
 
         {/* =====================================================
