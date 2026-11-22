@@ -1396,6 +1396,8 @@ def get_module_trends(
     module: str,
     minimum_years: int = 2,
     similarity_threshold: float = 0.62,
+    exam: str | None = None,
+    before_year: int | None = None,
 ):
 
     normalized_module = (
@@ -1459,7 +1461,9 @@ def get_module_trends(
                 ON mq.paper_id =
                    p.id
 
-            WHERE p.module = ?
+            WHERE p.module = :module
+              AND (:exam IS NULL OR p.exam = :exam COLLATE NOCASE)
+              AND (:before_year IS NULL OR p.year < :before_year)
 
             ORDER BY
                 p.year DESC,
@@ -1469,17 +1473,22 @@ def get_module_trends(
                 ) ASC,
                 sq.label ASC
             """,
-            (
-                normalized_module,
-            ),
+            {
+                "module": normalized_module,
+                "exam": exam,
+                "before_year": before_year,
+            },
         ).fetchall()
 
     if not rows:
 
         raise HTTPException(
             status_code=404,
-            detail=
-                f"No exam questions found for {normalized_module}",
+            detail=(
+                "No earlier indexed papers match this module and session."
+                if exam is not None or before_year is not None
+                else f"No exam questions found for {normalized_module}"
+            ),
         )
 
     questions = []

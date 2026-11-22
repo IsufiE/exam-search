@@ -434,6 +434,32 @@ def test_trends_endpoint_returns_analysis(
     )
 
 
+def test_forecast_uses_only_earlier_papers_in_selected_session(
+    client, seed_questions, monkeypatch,
+):
+    seed_questions(module="TEST200")
+    analysed = []
+
+    def capture_topics(questions, **_):
+        analysed.extend((question["year"], question["exam"]) for question in questions)
+        return []
+
+    monkeypatch.setattr(main, "analyse_topics", capture_topics)
+
+    response = client.get(
+        "/trends/test200",
+        params={"exam": "spring", "before_year": 2025},
+    )
+    assert response.status_code == 200
+    assert response.json()["papers_years"] == [2024]
+    assert analysed == [(2024, "Spring")]
+
+    assert client.get(
+        "/trends/test200",
+        params={"exam": "May", "before_year": 2026},
+    ).status_code == 404
+
+
 def test_trends_unknown_module_returns_404(
     client,
 ):

@@ -82,7 +82,11 @@ type SimilarQuestionsResponse = {
   matches: SimilarQuestionMatch[];
 };
 
-type MainView = "search" | "trends" | "library" | "upload";
+type MainView = "search" | "trends" | "predictor" | "library" | "upload";
+
+type PredictionResult = Omit<TrendResponse, "topics"> & {
+  topics: (TrendTopic & { estimate: number })[];
+};
 
 const API =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -163,6 +167,22 @@ export default function Home() {
   // =========================================================
   // Trends state
   // =========================================================
+
+  const [predictionModule, setPredictionModule] = useState("");
+  const [predictionExam, setPredictionExam] = useState("");
+  const [predictionYear, setPredictionYear] = useState(() => String(new Date().getFullYear() + 1));
+  const [prediction, setPrediction] = useState<PredictionResult | null>(null);
+  const [predictionError, setPredictionError] = useState("");
+  const [predicting, setPredicting] = useState(false);
+
+  const predictionExams = [...new Set(
+    papers.filter((paper) => paper.module === predictionModule).map((paper) => paper.exam),
+  )].sort();
+
+  function clearPrediction() {
+    setPrediction(null);
+    setPredictionError("");
+  }
 
   const [trendModule, setTrendModule] = useState("");
 
@@ -576,6 +596,53 @@ export default function Home() {
   // Trends
   // =========================================================
 
+  async function loadPrediction() {
+    clearPrediction();
+    setPredicting(true);
+
+    try {
+      const params = new URLSearchParams({
+        exam: predictionExam,
+        before_year: predictionYear,
+      });
+      const response = await fetch(
+        `${API}/trends/${encodeURIComponent(predictionModule)}?${params}`,
+        { signal: AbortSignal.timeout(30_000) },
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "The forecast could not be calculated.");
+      }
+
+      const data: TrendResponse = await response.json();
+      const years = [...data.papers_years].sort((a, b) => b - a);
+      const weights = years.map((year, index) => ({
+        year,
+        weight: 0.85 ** index,
+      }));
+      const totalWeight = weights.reduce((sum, { weight }) => sum + weight, 0);
+      const topics = data.topics.map((topic) => {
+        const seen = new Set(topic.years);
+        const appearances = weights.reduce(
+          (sum, { year, weight }) => sum + (seen.has(year) ? weight : 0),
+          0,
+        );
+        // Add one appearance and one absence to smooth small samples.
+        return { ...topic, estimate: (1 + appearances) / (2 + totalWeight) };
+      }).sort((a, b) => b.estimate - a.estimate);
+
+      setPrediction({ ...data, topics });
+    } catch (error) {
+      setPredictionError(
+        error instanceof Error && error.name === "TimeoutError"
+          ? "Analysis took too long. Try again."
+          : error instanceof Error ? error.message : "The forecast could not be calculated.",
+      );
+    } finally {
+      setPredicting(false);
+    }
+  }
+
   async function handleLoadTrends() {
     if (!trendModule) {
       setTrendMessage("Select a module first.");
@@ -696,6 +763,7 @@ export default function Home() {
             {([
               ["search", "Question search"],
               ["trends", "Exam trends"],
+              ["predictor", "Exam predictor"],
               ["library", "Past papers"],
               ["upload", "Add a paper"],
             ] as const).map(([view, label]) => (
@@ -1152,6 +1220,122 @@ export default function Home() {
                     </div>
                   )}
                 </section>
+              </div>
+            )}
+          </section>
+        )}
+
+        {mainView === "predictor" && (
+          <section aria-labelledby="predictor-title">
+            <h1 id="predictor-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Exam predictor
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-[#47554b]">
+              Estimate which topics could appear in an upcoming exam using earlier papers from the same module and session.
+            </p>
+
+            <form
+              className="mt-6 grid gap-3 border-b border-[#cbc5b4] pb-6 sm:grid-cols-3 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void loadPrediction();
+              }}
+            >
+              <label className="grid gap-1.5 text-sm font-medium">
+                Module
+                <select required value={predictionModule} disabled={predicting}
+                  onChange={(event) => {
+                    setPredictionModule(event.target.value);
+                    setPredictionExam("");
+                    clearPrediction();
+                  }}
+                  className="min-h-11 rounded-md border border-[#8a9182] bg-[#f2eddf] px-3 text-base">
+                  <option value="">Select a module</option>
+                  {availableModules.map((item) => <option key={item}>{item}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium">
+                Exam session
+                <select required value={predictionExam} disabled={predicting || !predictionModule}
+                  onChange={(event) => {
+                    setPredictionExam(event.target.value);
+                    clearPrediction();
+                  }}
+                  className="min-h-11 rounded-md border border-[#8a9182] bg-[#f2eddf] px-3 text-base">
+                  <option value="">Select a session</option>
+                  {predictionExams.map((item) => <option key={item}>{item}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium">
+                Exam year
+                <input required type="number" min="1900" max="2200" step="1" value={predictionYear}
+                  disabled={predicting}
+                  onChange={(event) => {
+                    setPredictionYear(event.target.value);
+                    clearPrediction();
+                  }}
+                  className="min-h-11 w-full rounded-md border border-[#8a9182] bg-[#f2eddf] px-3 text-base" />
+              </label>
+              <button type="submit" disabled={predicting || !predictionModule || !predictionExam || !predictionYear}
+                className="min-h-11 rounded-md bg-[#315a45] px-4 text-sm font-semibold text-white hover:bg-[#234532] disabled:bg-[#d8d9cb] disabled:text-[#47554b]">
+                {predicting ? "Analysing…" : "Predict topics"}
+              </button>
+            </form>
+
+            {(predicting || predictionError) && (
+              <p role="status" className="mt-4 text-sm text-[#47554b]">
+                {predicting ? "Looking for recurring topics in earlier papers…" : predictionError}
+              </p>
+            )}
+
+            {prediction && (
+              <div className="mt-6">
+                <h2 className="text-xl font-semibold">{prediction.module} · {predictionExam} {predictionYear}</h2>
+                <p className="mt-1 text-sm text-[#47554b]">
+                  Based on {prediction.years_analysed} indexed {prediction.years_analysed === 1 ? "year" : "years"} ({[...prediction.papers_years].sort((a, b) => a - b).join(", ")}).
+                </p>
+                {prediction.years_analysed < 3 ? (
+                  <p className="mt-4 text-sm text-[#47554b]">At least three earlier years from this exam session are needed to estimate chances.</p>
+                ) : prediction.topics.length === 0 ? (
+                  <p className="mt-4 text-sm text-[#47554b]">No topic was detected in at least two of the earlier exam years.</p>
+                ) : (
+                  <>
+                    <p className="my-4 max-w-2xl text-sm leading-6 text-[#47554b]">
+                      The estimates use how often a topic appeared, with extra weight given to newer papers. These estimates haven’t been tested against future exams. Open a topic to see its past questions.
+                    </p>
+                    <div className="divide-y divide-[#cbc5b4] rounded-lg border border-[#cbc5b4] bg-[#f2eddf]">
+                      {prediction.topics.map((topic) => (
+                        <details key={topic.id} className="group">
+                          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 hover:bg-[#e1ddce] focus-visible:outline-2 focus-visible:outline-[#35654b] [&::-webkit-details-marker]:hidden">
+                            <span className="flex items-baseline gap-2 font-medium">
+                              <span aria-hidden="true" className="inline-block group-open:rotate-90">▸</span>
+                              {topic.topic}
+                            </span>
+                            <span className="text-sm tabular-nums text-[#47554b]">
+                              {Math.round(topic.estimate * 100)}% estimate · {topic.years.length} of {prediction.years_analysed} years
+                            </span>
+                          </summary>
+                          <div className="border-t border-[#cbc5b4] px-4 pb-4 pt-3">
+                            <p className="text-sm text-[#47554b]">
+                              Seen in {[...topic.years].sort((a, b) => a - b).join(", ")}.
+                            </p>
+                            <ul className="mt-2 divide-y divide-[#cbc5b4]">
+                              {topic.questions.map((question) => (
+                                <li key={question.id} className="py-3">
+                                  <a href={getPaperUrl(question.paper_id, question.page_number)} target="_blank" rel="noreferrer"
+                                    className="text-sm font-medium text-[#315a45] underline underline-offset-4">
+                                    {question.year} {question.exam} · Q{question.question_number} PDF
+                                  </a>
+                                  <p className="mt-1 whitespace-pre-line break-words text-sm leading-6">{question.text}</p>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </section>
