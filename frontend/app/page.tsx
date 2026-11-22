@@ -1,5 +1,7 @@
 "use client";
 
+import Practice, { type PracticeQuestion } from "./practice";
+
 import { useEffect, useMemo, useState } from "react";
 
 type Paper = {
@@ -82,10 +84,24 @@ type SimilarQuestionsResponse = {
   matches: SimilarQuestionMatch[];
 };
 
-type MainView = "search" | "trends" | "predictor" | "library" | "upload";
+type MainView = "practice" | "search" | "trends" | "predictor" | "library" | "upload";
 
 type PredictionResult = Omit<TrendResponse, "topics"> & {
-  topics: (TrendTopic & { estimate: number })[];
+  topics: (TrendTopic & {
+    estimate: number;
+    cycle_years: number | null;
+    cycle_due: boolean;
+    alternates_with: string | null;
+    recent_shift: number;
+    styles: { label: string; years: number[] }[];
+  })[];
+  backtest: {
+    method: "frequency" | "cycle" | "shift";
+    exams_tested: number;
+    topics_tested: number;
+    baseline_hits: number;
+    selected_hits: number;
+  };
 };
 
 const API =
@@ -604,6 +620,7 @@ export default function Home() {
       const params = new URLSearchParams({
         exam: predictionExam,
         before_year: predictionYear,
+        forecast: "true",
       });
       const response = await fetch(
         `${API}/trends/${encodeURIComponent(predictionModule)}?${params}`,
@@ -614,24 +631,11 @@ export default function Home() {
         throw new Error(error.detail || "The forecast could not be calculated.");
       }
 
-      const data: TrendResponse = await response.json();
-      const years = [...data.papers_years].sort((a, b) => b - a);
-      const weights = years.map((year, index) => ({
-        year,
-        weight: 0.85 ** index,
-      }));
-      const totalWeight = weights.reduce((sum, { weight }) => sum + weight, 0);
-      const topics = data.topics.map((topic) => {
-        const seen = new Set(topic.years);
-        const appearances = weights.reduce(
-          (sum, { year, weight }) => sum + (seen.has(year) ? weight : 0),
-          0,
-        );
-        // Add one appearance and one absence to smooth small samples.
-        return { ...topic, estimate: (1 + appearances) / (2 + totalWeight) };
-      }).sort((a, b) => b.estimate - a.estimate);
-
-      setPrediction({ ...data, topics });
+      const data: PredictionResult = await response.json();
+      if (!data.backtest) {
+        throw new Error("Restart the backend to enable pattern analysis.");
+      }
+      setPrediction(data);
     } catch (error) {
       setPredictionError(
         error instanceof Error && error.name === "TimeoutError"
@@ -730,6 +734,15 @@ export default function Home() {
   // PDF helper
   // =========================================================
 
+  const [practiceQuestions, setPracticeQuestions] = useState<PracticeQuestion[]>([]);
+
+  function practiceButton(questions: TrendQuestion[], module: string, topic: string, label: string) {
+    return <button className="my-2 rounded-md border border-[#8a9182] px-3 py-2 text-sm font-medium" onClick={() => {
+      setPracticeQuestions(questions.map(question => ({ ...question, module, topic })));
+      setMainView("practice");
+    }}>{label}</button>;
+  }
+
   function getPaperUrl(
     paperId: string,
     pageNumber?: number | null
@@ -764,6 +777,7 @@ export default function Home() {
               ["search", "Question search"],
               ["trends", "Exam trends"],
               ["predictor", "Exam predictor"],
+              ["practice", "Practice"],
               ["library", "Past papers"],
               ["upload", "Add a paper"],
             ] as const).map(([view, label]) => (
@@ -1000,6 +1014,7 @@ export default function Home() {
                           className="group rounded-2xl border border-[#cbc5b4] bg-[#e8e1d1] p-6 transition hover:border-[#8a9182]"
                         >
 
+                          {practiceButton([result], result.module, "Search results", "Practise question")}
                           <div className="flex flex-wrap items-center gap-2">
 
                             <span className="rounded-full border border-[#cbc5b4] bg-[#f2eddf] px-3 py-1 text-xs font-medium text-[#47554b]">
@@ -1159,6 +1174,7 @@ export default function Home() {
                               </span>
                             </summary>
                             <div className="border-t border-[#cbc5b4] px-4 pb-4 pt-3 sm:px-6">
+                              {practiceButton(topic.questions, trendData.module, topic.topic, "Practise this topic")}
                               {[...topic.years].sort((a, b) => b - a).map((year) => (
                                 <div key={year} className="mt-3 first:mt-0">
                                   <h3 className="text-base font-semibold">{year}</h3>
@@ -1301,7 +1317,14 @@ export default function Home() {
                 ) : (
                   <>
                     <p className="my-4 max-w-2xl text-sm leading-6 text-[#47554b]">
-                      The estimates use how often a topic appeared, with extra weight given to newer papers. These estimates haven’t been tested against future exams. Open a topic to see its past questions.
+                      Estimates start with how often a topic appeared. Open a topic to see its past questions and any patterns. The percentages are rough estimates.
+                    </p>
+                    <p className="mb-4 text-sm leading-6 text-[#47554b]">
+                      {prediction.backtest.exams_tested < 3
+                        ? "Too few earlier exams to test patterns reliably. The ranking uses frequency."
+                        : `Checked ${prediction.backtest.exams_tested} earlier exams. The frequency ranking matched ${prediction.backtest.baseline_hits} of ${prediction.backtest.topics_tested} predicted topics.`}
+                      {prediction.backtest.method !== "frequency" &&
+                        ` Adding ${prediction.backtest.method === "cycle" ? "cycle timing" : "recent shifts"} improved that to ${prediction.backtest.selected_hits} matches and is used in this ranking.`}
                     </p>
                     <div className="divide-y divide-[#cbc5b4] rounded-lg border border-[#cbc5b4] bg-[#f2eddf]">
                       {prediction.topics.map((topic) => (
@@ -1319,6 +1342,24 @@ export default function Home() {
                             <p className="text-sm text-[#47554b]">
                               Seen in {[...topic.years].sort((a, b) => a - b).join(", ")}.
                             </p>
+                            {(topic.cycle_years || topic.recent_shift !== 0) && (
+                              <p className="mt-2 text-sm text-[#47554b]">
+                                {topic.cycle_years && `Possible ${topic.cycle_years}-year cycle${topic.cycle_due ? " aligned with the target year" : ""}. `}
+                                {topic.recent_shift === 1 && "Appeared in both of the two most recent exams."}
+                                {topic.recent_shift === -1 && "Absent from both of the two most recent exams."}
+                              </p>
+                            )}
+                            {topic.alternates_with && (
+                              <p className="mt-2 text-sm text-[#47554b]">
+                                Alternated with {topic.alternates_with} across the four latest consecutive exam years.
+                              </p>
+                            )}
+                            {practiceButton(topic.questions, prediction.module, topic.topic, "Practise this topic")}
+                            {topic.styles.length > 0 && (
+                              <p className="mt-2 text-sm text-[#47554b]">
+                                Recurring tasks: {topic.styles.map((style) => `${style.label} (${style.years.join(", ")})`).join(" · ")}
+                              </p>
+                            )}
                             <ul className="mt-2 divide-y divide-[#cbc5b4]">
                               {topic.questions.map((question) => (
                                 <li key={question.id} className="py-3">
@@ -1344,6 +1385,8 @@ export default function Home() {
         {/* =====================================================
             LIBRARY
         ===================================================== */}
+
+        {mainView === "practice" && <Practice api={API} questions={practiceQuestions} papers={papers} url={getPaperUrl} />}
 
         {mainView === "library" && (
         <section aria-labelledby="library-title">
