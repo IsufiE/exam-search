@@ -104,9 +104,7 @@ type PredictionResult = Omit<TrendResponse, "topics"> & {
   };
 };
 
-const API =
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://127.0.0.1:8000";
+const API = "/api";
 
 const uploadYears = Array.from(
   { length: 27 },

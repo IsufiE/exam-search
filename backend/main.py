@@ -11,7 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from pdf_parser import extract_text_from_pdf
+from forecast_engine import forecast_topics
+from pdf_parser import OcrUnavailableError, extract_text_from_pdf
 from question_parser import split_into_questions
 from search_engine import (
     embed_text,
@@ -761,6 +762,16 @@ async def upload_paper(
     except HTTPException:
         raise
 
+    except OcrUnavailableError as error:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"PDF page {error.page_number} needs OCR. "
+                "Enable English OCR on the server or upload a searchable copy."
+            ),
+        ) from error
+
     except Exception as error:
 
         destination.unlink(
@@ -1398,7 +1409,11 @@ def get_module_trends(
     similarity_threshold: float = 0.62,
     exam: str | None = None,
     before_year: int | None = None,
+    forecast: bool = False,
 ):
+
+    if forecast and (not exam or before_year is None):
+        raise HTTPException(400, "Forecasts require an exam session and target year")
 
     normalized_module = (
         module
@@ -1588,7 +1603,15 @@ def get_module_trends(
         reverse=True,
     )
 
+    forecast_summary = {}
+    if forecast and before_year is not None:
+        topics, backtest = forecast_topics(
+            questions, topics, before_year, minimum_years, similarity_threshold
+        )
+        forecast_summary = {"backtest": backtest}
+
     return {
+        **forecast_summary,
         "module":
             normalized_module,
 

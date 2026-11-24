@@ -264,6 +264,15 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+For scanned or outlined exam pages, enable English OCR. On macOS with Homebrew, run:
+
+```bash
+brew install tesseract
+export TESSDATA_PREFIX="$(brew --prefix tesseract)/share/tessdata"
+```
+
+On other hosts, set `TESSDATA_PREFIX` to the directory containing `eng.traineddata`. Text-based papers can be uploaded without OCR.
+
 Start the FastAPI server:
 
 ```bash
@@ -307,6 +316,25 @@ Open:
 ```text
 http://localhost:3000
 ```
+
+To use Exam Search from another device on your local network, open the
+frontend using the host computer's LAN address and port 3000. The frontend
+forwards requests to the backend at `http://127.0.0.1:8000` by default.
+Set `API_URL` in `frontend/.env.local` and restart the frontend if the backend
+uses a different address.
+
+### Start both services on macOS
+
+After installing both sets of dependencies using the steps above, stop any
+manually started servers. Double-click `Start Exam Search.command` in Finder
+or run this from the project directory:
+
+```bash
+./"Start Exam Search.command"
+```
+
+Open http://localhost:3000 once the servers are ready. Keep the Terminal window
+open while using Exam Search and press Ctrl+C to stop both services.
 
 ## Current Status
 
