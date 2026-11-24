@@ -1,36 +1,8 @@
 # Exam Search
 
-Exam Search is a full-stack application for searching and analysing university past exam papers.
+Exam Search is a study workspace for university past papers. Upload exam PDFs, search by topic or question, and jump to the relevant page in the original paper. Use recurring topics to guide revision, or choose a whole paper for a timed mock.
 
-It extracts questions from uploaded PDF exam papers, generates semantic embeddings, and allows users to search for conceptually similar questions rather than relying only on exact keyword matches.
-
-The application also analyses historical exam papers to identify recurring topics, topic frequency across years, and questions that may have been repeated or reworded.
-
-## Screenshots
-
-### Semantic Search
-
-Search past exam questions using natural-language queries and rank results by relevance.
-
-![Semantic search results](docs/images/search-results.png)
-
-### Recurring Topic Analysis
-
-Analyse past papers to identify topics that have appeared across multiple exam years.
-
-![Recurring topic analysis](docs/images/trends.png)
-
-### Topic Frequency Dashboard
-
-Compare how often recurring topics appear across different exam years.
-
-![Topic frequency dashboard](docs/images/topic-frequency.png)
-
-### Similar Past Questions
-
-Identify questions from different years that are semantically similar or potentially reworded versions of one another.
-
-![Similar past questions](docs/images/similar-questions.png)
+![Current Exam Search interface with 10 matches for a convolutional neural network search in CS401](docs/images/current-search.jpg)
 
 ## Features
 
@@ -94,6 +66,14 @@ The feature uses semantic similarity rather than exact text matching, allowing i
 Search results, trend results, and similar-question matches link back to the original uploaded PDF.
 
 Where page information is available, the application opens the source paper at the relevant page.
+
+### Practice and Timed Mocks
+
+Practise questions from a selected paper, rate how well you answered, and revisit questions in the revision queue. Start a timed mock using the same past paper selection.
+
+### Exam Predictor
+
+Choose a module, exam session, and target year to see topic estimates based on earlier papers from that session. Each estimate shows the years in which the topic appeared. The predictor needs at least three earlier years of papers from the selected session to show estimates.
 
 ### Multi-Module Support
 
